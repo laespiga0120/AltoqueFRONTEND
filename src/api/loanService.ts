@@ -1,7 +1,8 @@
 import { Loan, LoanDto } from "../types/loan";
 import { downloadPdf } from "../utils/downloadHelper";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "https://altoquebackend-2-t1zv.onrender.com";
 
 export const loanService = {
   getAllLoans: async (): Promise<Loan[]> => {

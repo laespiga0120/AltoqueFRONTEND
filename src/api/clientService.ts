@@ -1,6 +1,7 @@
 import { ClientSummary, ClientDetail } from "@/types/client";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "https://altoquebackend-2-t1zv.onrender.com";
 
 /**
  * Función genérica para manejar la descarga de archivos PDF.
