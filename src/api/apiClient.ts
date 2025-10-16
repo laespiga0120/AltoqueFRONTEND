@@ -1,7 +1,7 @@
 // Definimos la URL base de tu API.
 // Es una buena práctica usar variables de entorno para esto.
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://altoquebackend-2-t1zv.onrender.com";
+  import.meta.env.VITE_API_URL || "https://altoque-backend-08ea2502c465.herokuapp.com/";
 
 // Opciones personalizadas para nuestro cliente.
 // Extendemos RequestInit pero permitimos que 'body' sea un objeto JS.
