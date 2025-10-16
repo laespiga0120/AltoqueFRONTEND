@@ -1,7 +1,7 @@
 import { ClientSummary, ClientDetail } from "@/types/client";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://altoque-backend-08ea2502c465.herokuapp.com/";
+  import.meta.env.VITE_API_URL || "https://git.heroku.com/altoquebackend.git";
 
 /**
  * Función genérica para manejar la descarga de archivos PDF.
