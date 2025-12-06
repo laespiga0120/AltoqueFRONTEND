@@ -1,7 +1,8 @@
 // Definimos la URL base de tu API.
 // Es una buena práctica usar variables de entorno para esto.
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:8080";
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.MODE === "development" ? "" : "http://localhost:8080");
 
 // Opciones personalizadas para nuestro cliente.
 // Extendemos RequestInit pero permitimos que 'body' sea un objeto JS.
