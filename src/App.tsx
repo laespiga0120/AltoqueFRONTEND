@@ -7,6 +7,8 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import NewLoan from "./pages/NewLoan";
 import LoanDetails from "./pages/LoanDetails";
+import PaymentOperations from "./pages/PaymentOperations";
+import CashRegister from "./pages/CashRegister";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -47,6 +49,26 @@ const App = () => (
               <ProtectedRoute>
                 <Layout>
                   <LoanDetails />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operations"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <PaymentOperations />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/cash-register"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <CashRegister />
                 </Layout>
               </ProtectedRoute>
             }
