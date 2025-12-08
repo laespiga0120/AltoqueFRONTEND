@@ -1,8 +1,6 @@
 import { ClientDetail } from "./client";
 
-// --- NUEVO TIPO AÑADIDO ---
-// Representa el objeto de datos que se envía al backend para crear un préstamo.
-// Coincide con el PrestamoDto de Java.
+// DTO para registrar un nuevo préstamo (Payload al backend)
 export interface LoanDto {
   idCliente: number;
   monto: number;
@@ -11,27 +9,33 @@ export interface LoanDto {
   fechaPrestamo: string;
 }
 
-// Representa la estructura completa de un préstamo que viene del backend
+// Estructura completa de un préstamo (Respuesta del backend)
 export interface Loan {
   idPrestamo: number;
-  cliente: ClientDetail; // El objeto cliente viene anidado
+  cliente: ClientDetail; // Contiene datos anidados del cliente
+  
   monto: number;
   tasaInteresAnual: number;
   numeroCuotas: number;
   fechaPrestamo: string;
   estado: string;
+  
+  // Flags de documentos
+  declaracionImpresa?: boolean;
+  declaracionPepImpresa?: boolean;
 }
 
-// Representa la estructura para el envío de correos
+// Estructura para el envío de correos
 export interface EmailRequest {
-  clienteId: String;
+  clienteId: number;
   prestamoId: number;
-  emailDestino?: string; // Opcional
+  emailDestino?: string;
 }
 
-// Representa una cuota del cronograma (generado en el frontend por ahora)
+// Representa una cuota del cronograma (para la tabla de visualización)
 export interface PaymentInstallment {
   installmentNumber: number;
   dueDate: string;
   amount: number;
+  state: string;
 }

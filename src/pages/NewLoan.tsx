@@ -13,13 +13,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  AlertCircle,
   FileText,
   Printer,
   Sparkles,
   ArrowLeft,
   UserPlus,
   Loader2,
+  Building2,
+  User
 } from "lucide-react";
 import { toast } from "sonner";
 import { clientService } from "../api/clientService";
@@ -50,13 +51,16 @@ export default function NewLoan() {
   const clientSummary = location.state?.client as ClientSummary | undefined;
 
   const [clientDetails, setClientDetails] = useState<ClientDetail | null>(null);
+  
+  // Estado unificado del formulario
   const [formState, setFormState] = useState({
+    // Persona Natural
     direccionCliente: "",
     fechaNacimiento: "",
     correoCliente: "",
     telefonoCliente: "",
     esPep: false,
-    // Estado para Persona Jurídica
+    // Persona Jurídica
     ruc: "",
     razonSocial: "",
     direccionFiscal: "",
@@ -65,6 +69,7 @@ export default function NewLoan() {
     representanteLegalNombre: "",
     cargoRepresentante: "",
   });
+  
   const [loanState, setLoanState] = useState({
     amount: "",
     interestRate: "24",
@@ -76,11 +81,13 @@ export default function NewLoan() {
   const [loadingClientDetails, setLoadingClientDetails] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  const exceedsUIT = parseFloat(loanState.amount) > UIT_VALUE;
+  const exceedsUIT = parseFloat(loanState.amount || "0") > UIT_VALUE;
 
   useEffect(() => {
-    // Validación: debe tener DNI o RUC
-    if (!clientSummary?.dniCliente && !clientSummary?.ruc) {
+    // Validación: debe tener DNI o RUC en el summary que viene del Dashboard
+    const documentId = clientSummary?.ruc || clientSummary?.dniCliente;
+
+    if (!documentId) {
       toast.error("No se ha proporcionado un documento de identidad válido.");
       navigate("/");
       return;
@@ -89,46 +96,44 @@ export default function NewLoan() {
     const fetchClientDetails = async () => {
       try {
         setLoadingClientDetails(true);
-        let data: ClientDetail;
         
-        if (clientSummary.tipo === 'JURIDICA' && clientSummary.ruc) {
-           data = await clientService.getDetailsByRUC(clientSummary.ruc);
-        } else if (clientSummary.dniCliente) {
-           data = await clientService.getDetailsByDNI(clientSummary.dniCliente);
-        } else {
-           throw new Error("Identificador de cliente no válido");
-        }
+        // --- CORRECCIÓN: Usar endpoint unificado "detalles/{doc}" ---
+        // El backend sabe si es DNI o RUC por la longitud y devuelve el DTO correcto.
+        const data = await clientService.getDetailsByDocument(documentId);
 
         setClientDetails(data);
+        
+        // Mapeo inicial de datos al formulario
         setFormState({
+          // Natural
           direccionCliente: data.direccionCliente || "",
-          fechaNacimiento: data.fechaNacimiento
-            ? data.fechaNacimiento.split("T")[0]
-            : "",
+          fechaNacimiento: data.fechaNacimiento ? data.fechaNacimiento.split("T")[0] : "",
           correoCliente: data.correoCliente || "",
           telefonoCliente: data.telefonoCliente || "",
           esPep: data.esPep || false,
-          // Mapeo de datos de PJ
+          // Jurídica
           ruc: data.ruc || "",
           razonSocial: data.razonSocial || "",
           direccionFiscal: data.direccionFiscal || "",
-          fechaConstitucion: data.fechaConstitucion
-            ? data.fechaConstitucion.split("T")[0]
-            : "",
+          fechaConstitucion: data.fechaConstitucion ? data.fechaConstitucion.split("T")[0] : "",
           representanteLegalDni: data.representanteLegalDni || "",
           representanteLegalNombre: data.representanteLegalNombre || "",
-          cargoRepresentante: "", // Si hubiese
+          cargoRepresentante: "", 
         });
 
+        // Si esNuevo es false, significa que ya existe en BD
         if (!data.esNuevo) {
           setIsClientRegistered(true);
-          toast.info("Cliente ya registrado. Se ha cargado su información.");
+          toast.info("Cliente registrado. Información cargada.");
+        } else {
+            toast.info(data.tipo === 'JURIDICA' 
+                ? "Empresa nueva. Por favor complete el registro." 
+                : "Cliente nuevo. Por favor complete el registro.");
         }
+
       } catch (error) {
         console.error(error);
-        toast.error(
-          "No se pudo cargar la información del cliente. Intente de nuevo."
-        );
+        toast.error("No se pudo cargar la información. Intente de nuevo.");
         navigate("/");
       } finally {
         setLoadingClientDetails(false);
@@ -180,20 +185,16 @@ export default function NewLoan() {
       );
       toast.success("Descarga de la declaración iniciada.");
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Error desconocido";
-      toast.error(`No se pudo generar el documento: ${errorMessage}`);
+      toast.error("No se pudo generar el documento.");
     }
   };
 
   const handleRegisterClient = async () => {
     if (!clientDetails) return;
-
-    if (!clientDetails) return;
     
-    // VALIDACIÓN DIFERENCIADA
     const isJuridica = clientDetails.tipo === "JURIDICA";
 
+    // --- VALIDACIÓN DE CAMPOS ---
     if (isJuridica) {
       if (
         !formState.ruc ||
@@ -215,16 +216,14 @@ export default function NewLoan() {
         return;
       }
     } else {
-      // Validación Persona Natural
+      // Persona Natural
       if (
         !formState.direccionCliente ||
         !formState.fechaNacimiento ||
         !formState.correoCliente ||
         !formState.telefonoCliente
       ) {
-        toast.error(
-          "Todos los campos de información del cliente son obligatorios."
-        );
+        toast.error("Todos los campos son obligatorios.");
         return;
       }
       if (!isOfLegalAge(formState.fechaNacimiento)) {
@@ -232,26 +231,39 @@ export default function NewLoan() {
         return;
       }
     }
+
+    // Validaciones comunes
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formState.correoCliente)) {
-      toast.error("Por favor, ingrese un correo electrónico válido.");
+      toast.error("Ingrese un correo válido.");
       return;
     }
     if (!/^\d{9}$/.test(formState.telefonoCliente)) {
-      toast.error("El número de teléfono debe contener 9 dígitos.");
+      toast.error("El teléfono debe tener 9 dígitos.");
       return;
     }
 
     setLoading(true);
     try {
+      // Preparamos el payload combinando el objeto base con el estado del formulario
       const payload: Partial<ClientDetail> = {
         ...clientDetails,
         ...formState,
+        // Aseguramos que el tipo no se pierda
+        tipo: clientDetails.tipo 
       };
+      
       const registeredClient = await clientService.registerOrUpdate(payload);
-      setClientDetails(registeredClient);
+      setClientDetails({
+        ...registeredClient,
+        tipo: clientDetails.tipo // Importante: Preservar el tipo original por si el backend no lo devuelve
+      });
       setIsClientRegistered(true);
-      toast.success("Información del cliente guardada correctamente.");
+      toast.success(
+          isJuridica 
+            ? "Empresa registrada correctamente." 
+            : "Cliente registrado correctamente."
+      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Error desconocido";
@@ -264,13 +276,11 @@ export default function NewLoan() {
   const handleSubmitLoan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientDetails?.idCliente) {
-      toast.error(
-        "El cliente no tiene un ID válido. Guarde su información primero."
-      );
+      toast.error("Error: ID de cliente no válido. Guarde la información primero.");
       return;
     }
     if (!isClientRegistered) {
-      toast.warning("Por favor, primero guarde la información del cliente.");
+      toast.warning("Por favor, guarde la información del cliente antes de continuar.");
       return;
     }
 
@@ -278,43 +288,31 @@ export default function NewLoan() {
     const interest = parseFloat(loanState.interestRate);
     const installments = parseInt(loanState.installments, 10);
 
-    if (isNaN(amount) || amount <= 0) {
-      toast.error("El monto del préstamo debe ser un número mayor a cero.");
-      return;
-    }
-    if (isNaN(interest) || interest <= 0) {
-      toast.error("La tasa de interés debe ser un número mayor a cero.");
-      return;
-    }
-    if (isNaN(installments) || installments <= 0) {
-      toast.error("El número de cuotas debe ser mayor a cero.");
-      return;
-    }
+    // Validaciones numéricas básicas
+    if (amount <= 0 || isNaN(amount)) { toast.error("Monto inválido."); return; }
+    if (interest <= 0 || isNaN(interest)) { toast.error("Interés inválido."); return; }
+    if (installments <= 0 || isNaN(installments)) { toast.error("Plazo inválido."); return; }
 
     setLoading(true);
     try {
       const loanPayload: LoanDto = {
-        idCliente: Number(clientDetails.idCliente),
+        idCliente: Number(clientDetails.idCliente), // Aseguramos conversión a número
         monto: amount,
         tasaInteresAnual: interest,
         numeroCuotas: installments,
         fechaPrestamo: loanState.loanDate,
       };
 
-      // --- INICIO DE LA CORRECCIÓN ---
-      // 1. Se llama al servicio y la respuesta (`newLoan`) ya tiene la estructura
-      //    correcta (tipo `Loan`) que espera la página de detalles.
       const newLoan = await loanService.registerLoan(loanPayload);
-      toast.success(`Préstamo #${newLoan.idPrestamo} registrado exitosamente.`);
-
-      // 2. Se pasa el objeto `newLoan` directamente en la navegación.
-      //    No es necesario construir un objeto intermedio.
+      toast.success(`Préstamo #${newLoan.idPrestamo} registrado.`);
+      
+      // Navegar a detalles con el objeto completo
       navigate(`/loans/${newLoan.idPrestamo}`, { state: { loan: newLoan } });
-      // --- FIN DE LA CORRECCIÓN ---
+
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Error desconocido";
-      toast.error(`Error al registrar el préstamo: ${errorMessage}`);
+      toast.error(`Error al registrar préstamo: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -324,118 +322,106 @@ export default function NewLoan() {
     return (
       <div className="flex justify-center items-center h-96">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-4 text-lg">Cargando información del cliente...</p>
+        <p className="ml-4 text-lg">Cargando información...</p>
       </div>
     );
   }
 
   if (!clientDetails) return null;
 
-  const areClientFieldsDisabled = !clientDetails.esNuevo || isClientRegistered;
+  const isJuridica = clientDetails.tipo === "JURIDICA";
+  const areFieldsDisabled = !clientDetails.esNuevo || isClientRegistered;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <Button
-          variant="outline"
-          onClick={() => navigate("/")}
-          className="gap-2"
-        >
+        <Button variant="outline" onClick={() => navigate("/")} className="gap-2">
           <ArrowLeft className="h-4 w-4" />
           Volver
         </Button>
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Registrar Nuevo Préstamo
+            {isClientRegistered ? "Registrar Nuevo Préstamo" : "Registro de Cliente"}
           </h1>
           <p className="text-muted-foreground">
-            Complete la información del préstamo
+            {isJuridica ? "Persona Jurídica" : "Persona Natural"}
           </p>
         </div>
       </div>
 
-      <Card
-        className="border-0"
-        style={{
-          background: "var(--gradient-card)",
-          boxShadow: "var(--shadow-card)",
-        }}
-      >
+      {/* TARJETA DE INFORMACIÓN DEL CLIENTE */}
+      <Card className="border-0 shadow-lg" style={{ background: "var(--gradient-card)" }}>
         <CardHeader>
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20">
-              <Sparkles className="h-6 w-6 text-primary" />
+              {isJuridica ? <Building2 className="h-6 w-6 text-primary" /> : <User className="h-6 w-6 text-primary" />}
             </div>
             <div>
-              <CardTitle className="text-xl">Información del Cliente</CardTitle>
+              <CardTitle className="text-xl">
+                 {isJuridica ? "Datos de la Empresa" : "Datos Personales"}
+              </CardTitle>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {clientDetails.tipo === "JURIDICA" ? (
-               /* --- FORMULARIO PERSONA JURIDICA --- */
+            
+            {/* --- RENDERIZADO CONDICIONAL: JURÍDICA vs NATURAL --- */}
+            {isJuridica ? (
+              /* FORMULARIO PERSONA JURÍDICA */
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30">
                   <div>
-                    <Label className="text-sm font-semibold text-muted-foreground">
-                      RUC
-                    </Label>
+                    <Label className="text-sm font-semibold text-muted-foreground">RUC</Label>
                     <Input
                        id="ruc"
                        value={formState.ruc || clientDetails.ruc || ""} 
                        onChange={handleFormChange}
                        className="mt-2 h-12 text-base font-bold"
-                       disabled={areClientFieldsDisabled || !!clientDetails.ruc} // RUC suele ser inmutable si ya viene
+                       disabled={true} // El RUC no se edita, viene de la búsqueda
                     />
                   </div>
                   <div>
-                    <Label className="text-sm font-semibold text-muted-foreground">
-                      Razón Social
-                    </Label>
+                    <Label className="text-sm font-semibold text-muted-foreground">Razón Social</Label>
                     <Input
                        id="razonSocial"
                        value={formState.razonSocial} 
                        onChange={handleFormChange}
                        className="mt-2 h-12 text-base font-bold"
-                       disabled={areClientFieldsDisabled}
+                       disabled={areFieldsDisabled}
+                       placeholder="Nombre de la empresa S.A.C."
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30">
                    <div>
-                    <Label htmlFor="direccionFiscal" className="text-sm font-semibold text-muted-foreground">
-                      Dirección Fiscal
-                    </Label>
+                    <Label htmlFor="direccionFiscal" className="text-sm font-semibold text-muted-foreground">Dirección Fiscal</Label>
                     <Input
                       id="direccionFiscal"
                       value={formState.direccionFiscal || ""}
                       onChange={handleFormChange}
                       className="mt-2 h-12 text-base"
-                      disabled={areClientFieldsDisabled}
+                      disabled={areFieldsDisabled}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="fechaConstitucion" className="text-sm font-semibold text-muted-foreground">
-                      Fecha de Constitución
-                    </Label>
+                    <Label htmlFor="fechaConstitucion" className="text-sm font-semibold text-muted-foreground">Fecha de Constitución</Label>
                     <Input
                       id="fechaConstitucion"
                       type="date"
                       value={formState.fechaConstitucion || ""}
                       onChange={handleFormChange}
                       className="mt-2 h-12 text-base"
-                      disabled={areClientFieldsDisabled}
+                      disabled={areFieldsDisabled}
                     />
                   </div>
                 </div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30 border border-accent/20">
+                   <div className="md:col-span-2 text-sm font-bold text-accent mb-2">REPRESENTANTE LEGAL</div>
                    <div>
-                    <Label htmlFor="representanteLegalDni" className="text-sm font-semibold text-muted-foreground">
-                      DNI Representante Legal
-                    </Label>
+                    <Label htmlFor="representanteLegalDni" className="text-sm font-semibold text-muted-foreground">DNI Representante</Label>
                     <Input
                       id="representanteLegalDni"
                       value={formState.representanteLegalDni || ""}
@@ -444,190 +430,126 @@ export default function NewLoan() {
                          setFormState(prev => ({...prev, representanteLegalDni: val}));
                       }}
                       className="mt-2 h-12 text-base"
-                      disabled={areClientFieldsDisabled}
+                      disabled={areFieldsDisabled}
                       maxLength={8}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="representanteLegalNombre" className="text-sm font-semibold text-muted-foreground">
-                      Nombre Representante Legal
-                    </Label>
+                    <Label htmlFor="representanteLegalNombre" className="text-sm font-semibold text-muted-foreground">Nombre Completo</Label>
                     <Input
                       id="representanteLegalNombre"
                       value={formState.representanteLegalNombre || ""}
                       onChange={handleFormChange}
                       className="mt-2 h-12 text-base"
-                      disabled={areClientFieldsDisabled}
+                      disabled={areFieldsDisabled}
                     />
                   </div>
                 </div>
-                 {/* Reutilizamos campos comunes si es necesario, e.g. telefono/correo de contacto de la empresa */}
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30">
-                    <div>
-                    <Label htmlFor="correoCliente" className="text-sm font-semibold text-muted-foreground">
-                      Correo Electrónico (Contacto)
-                    </Label>
+              </div>
+            ) : (
+              /* FORMULARIO PERSONA NATURAL */
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 rounded-2xl bg-secondary/30">
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">DNI</Label>
+                    <p className="text-2xl font-bold text-foreground">{clientDetails.dniCliente}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">Nombre</Label>
+                    <p className="text-2xl font-bold text-foreground">{clientDetails.nombreCliente}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">Apellido</Label>
+                    <p className="text-2xl font-bold text-foreground">{clientDetails.apellidoCliente}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30">
+                  <div>
+                    <Label htmlFor="direccionCliente" className="text-sm font-semibold text-muted-foreground">Dirección</Label>
                     <Input
-                      id="correoCliente"
-                      type="email"
-                      value={formState.correoCliente}
+                      id="direccionCliente"
+                      value={formState.direccionCliente}
                       onChange={handleFormChange}
                       className="mt-2 h-12 text-base"
-                      disabled={areClientFieldsDisabled}
+                      disabled={areFieldsDisabled}
+                      required
                     />
                   </div>
                   <div>
-                    <Label htmlFor="telefonoCliente" className="text-sm font-semibold text-muted-foreground">
-                      Teléfono (Contacto)
-                    </Label>
+                    <Label htmlFor="fechaNacimiento" className="text-sm font-semibold text-muted-foreground">Fecha de Nacimiento</Label>
                     <Input
-                      id="telefonoCliente"
-                      type="tel"
-                      value={formState.telefonoCliente}
+                      id="fechaNacimiento"
+                      type="date"
+                      value={formState.fechaNacimiento}
                       onChange={handleFormChange}
                       className="mt-2 h-12 text-base"
-                      disabled={areClientFieldsDisabled}
-                      maxLength={9}
+                      disabled={areFieldsDisabled}
+                      required
                     />
                   </div>
-                 </div>
+                </div>
+              </>
+            )}
 
-              </div>
-            ) : (
-                /* --- FORMULARIO PERSONA NATURAL (EXISTENTE) --- */
-              <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 rounded-2xl bg-secondary/30">
-            {/* ...resto del form natural... */}
-              <div>
-                <Label className="text-sm font-semibold text-muted-foreground">
-                  DNI
-                </Label>
-                <p className="text-2xl font-bold text-foreground">
-                  {clientDetails.dniCliente}
-                </p>
-              </div>
-              <div>
-                <Label className="text-sm font-semibold text-muted-foreground">
-                  Nombre
-                </Label>
-                <p className="text-2xl font-bold text-foreground">
-                  {clientDetails.nombreCliente}
-                </p>
-              </div>
-              <div>
-                <Label className="text-sm font-semibold text-muted-foreground">
-                  Apellido
-                </Label>
-                <p className="text-2xl font-bold text-foreground">
-                  {clientDetails.apellidoCliente}
-                </p>
-              </div>
-            </div>
+            {/* --- CAMPOS COMUNES (CONTACTO) --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30">
               <div>
-                <Label
-                  htmlFor="direccionCliente"
-                  className="text-sm font-semibold text-muted-foreground"
-                >
-                  Dirección
-                </Label>
-                <Input
-                  id="direccionCliente"
-                  type="text"
-                  value={formState.direccionCliente}
-                  onChange={handleFormChange}
-                  className="mt-2 h-12 text-base"
-                  disabled={areClientFieldsDisabled}
-                  required
-                />
-              </div>
-              <div>
-                <Label
-                  htmlFor="fechaNacimiento"
-                  className="text-sm font-semibold text-muted-foreground"
-                >
-                  Fecha de Nacimiento
-                </Label>
-                <Input
-                  id="fechaNacimiento"
-                  type="date"
-                  value={formState.fechaNacimiento}
-                  onChange={handleFormChange}
-                  className="mt-2 h-12 text-base"
-                  disabled={areClientFieldsDisabled}
-                  required
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30">
-              <div>
-                <Label
-                  htmlFor="correoCliente"
-                  className="text-sm font-semibold text-muted-foreground"
-                >
-                  Correo Electrónico
-                </Label>
+                <Label htmlFor="correoCliente" className="text-sm font-semibold text-muted-foreground">Correo Electrónico</Label>
                 <Input
                   id="correoCliente"
                   type="email"
                   value={formState.correoCliente}
                   onChange={handleFormChange}
                   className="mt-2 h-12 text-base"
-                  disabled={areClientFieldsDisabled}
+                  disabled={areFieldsDisabled}
                   required
                 />
               </div>
               <div>
-                <Label
-                  htmlFor="telefonoCliente"
-                  className="text-sm font-semibold text-muted-foreground"
-                >
-                  Teléfono
-                </Label>
+                <Label htmlFor="telefonoCliente" className="text-sm font-semibold text-muted-foreground">Teléfono</Label>
                 <Input
                   id="telefonoCliente"
                   type="tel"
                   value={formState.telefonoCliente}
                   onChange={handleFormChange}
                   className="mt-2 h-12 text-base"
-                  disabled={areClientFieldsDisabled}
+                  disabled={areFieldsDisabled}
                   required
                   maxLength={9}
                 />
               </div>
             </div>
-             <div className="flex items-center gap-4 p-6 rounded-2xl bg-secondary/30 border border-primary/20">
-              <Checkbox
-                id="esPep"
-                checked={formState.esPep}
-                onCheckedChange={(checked) =>
-                  setFormState((prev) => ({ ...prev, esPep: !!checked }))
-                }
-                className="h-5 w-5"
-                disabled={areClientFieldsDisabled}
-              />
-              <div className="flex-1">
-                <Label
-                  htmlFor="esPep"
-                  className="cursor-pointer font-semibold text-base"
-                >
-                  Cliente es Persona Expuesta Políticamente (PEP)
-                </Label>
-              </div>
-              {formState.esPep && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleDownloadPEP}
-                  className="gap-2 flex-shrink-0 border-primary/50 text-primary hover:bg-primary/10"
-                >
-                  <Printer className="h-4 w-4" />
-                  Declaración PEP
-                </Button>
-              )}
-            </div>
-            </>
+            
+            {/* PEP CHECKBOX (Solo Natural) */}
+            {!isJuridica && (
+               <div className="flex items-center gap-4 p-6 rounded-2xl bg-secondary/30 border border-primary/20">
+                  <Checkbox
+                    id="esPep"
+                    checked={formState.esPep}
+                    onCheckedChange={(checked) => setFormState((prev) => ({ ...prev, esPep: !!checked }))}
+                    className="h-5 w-5"
+                    disabled={areFieldsDisabled}
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor="esPep" className="cursor-pointer font-semibold text-base">
+                      Cliente es Persona Expuesta Políticamente (PEP)
+                    </Label>
+                  </div>
+                  {formState.esPep && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleDownloadPEP}
+                      className="gap-2 flex-shrink-0 border-primary/50 text-primary hover:bg-primary/10"
+                    >
+                      <Printer className="h-4 w-4" />
+                      Declaración PEP
+                    </Button>
+                  )}
+               </div>
             )}
+
+            {/* Botón de Guardar Cliente (Solo si no está registrado) */}
             {!isClientRegistered && (
               <div className="flex justify-end pt-4">
                 <Button
@@ -637,7 +559,7 @@ export default function NewLoan() {
                   disabled={loading}
                 >
                   <UserPlus className="h-5 w-5" />
-                  {loading ? "Guardando..." : "Guardar Cliente"}
+                  {loading ? "Guardando..." : "Guardar Información"}
                 </Button>
               </div>
             )}
@@ -645,18 +567,9 @@ export default function NewLoan() {
         </CardContent>
       </Card>
 
-      <div
-        className={`${
-          !isClientRegistered ? "opacity-50 pointer-events-none" : ""
-        }`}
-      >
-        <Card
-          className="border-0"
-          style={{
-            background: "var(--gradient-card)",
-            boxShadow: "var(--shadow-card)",
-          }}
-        >
+      {/* TARJETA DE DETALLES DEL PRÉSTAMO (Deshabilitada si no hay cliente registrado) */}
+      <div className={`${!isClientRegistered ? "opacity-50 pointer-events-none grayscale" : ""}`}>
+        <Card className="border-0 shadow-lg" style={{ background: "var(--gradient-card)" }}>
           <CardHeader>
             <div className="flex items-center gap-3">
               <div className="p-3 rounded-xl bg-gradient-to-br from-primary to-accent shadow-lg">
@@ -664,9 +577,7 @@ export default function NewLoan() {
               </div>
               <div>
                 <CardTitle className="text-xl">Detalles del Préstamo</CardTitle>
-                <CardDescription className="text-base">
-                  Préstamo de libre disponibilidad a 30 días
-                </CardDescription>
+                <CardDescription className="text-base">Configure las condiciones del crédito</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -674,9 +585,7 @@ export default function NewLoan() {
             <form onSubmit={handleSubmitLoan} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="amount" className="text-base font-semibold">
-                    Monto del Préstamo (S/)
-                  </Label>
+                  <Label htmlFor="amount" className="text-base font-semibold">Monto del Préstamo (S/)</Label>
                   <div className="flex gap-3">
                     <Input
                       id="amount"
@@ -703,12 +612,7 @@ export default function NewLoan() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label
-                    htmlFor="interestRate"
-                    className="text-base font-semibold"
-                  >
-                    Interés Anual (%)
-                  </Label>
+                  <Label htmlFor="interestRate" className="text-base font-semibold">Interés Anual (%)</Label>
                   <Input
                     id="interestRate"
                     type="number"
@@ -722,9 +626,7 @@ export default function NewLoan() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="loanDate" className="text-base font-semibold">
-                    Fecha del Préstamo
-                  </Label>
+                  <Label htmlFor="loanDate" className="text-base font-semibold">Fecha del Préstamo</Label>
                   <Input
                     id="loanDate"
                     type="date"
@@ -736,12 +638,7 @@ export default function NewLoan() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label
-                    htmlFor="installments"
-                    className="text-base font-semibold"
-                  >
-                    Plazo (Número de Cuotas)
-                  </Label>
+                  <Label htmlFor="installments" className="text-base font-semibold">Plazo (Cuotas)</Label>
                   <Input
                     id="installments"
                     type="number"
@@ -755,16 +652,16 @@ export default function NewLoan() {
                   />
                 </div>
               </div>
+              
               {exceedsUIT && (
                 <Alert className="border-primary/50 bg-primary/5">
                   <FileText className="h-4 w-4 text-primary" />
                   <AlertDescription className="text-sm font-medium">
-                    El monto supera 1 UIT (S/{" "}
-                    {UIT_VALUE.toLocaleString("es-PE")}). Se requiere
-                    declaración jurada.
+                    Monto superior a 1 UIT (S/ {UIT_VALUE.toLocaleString("es-PE")}). Se requiere declaración jurada.
                   </AlertDescription>
                 </Alert>
               )}
+
               <div className="flex gap-4 pt-4">
                 <Button
                   type="submit"

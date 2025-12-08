@@ -1,44 +1,39 @@
-/**
+// src/types/client.ts
 
-Representa la información resumida del cliente que se obtiene en la búsqueda inicial del Dashboard.
-
-Corresponde al DTO ClienteConsultaDto del backend.
-*/
+// Usado en el Dashboard (Resultados de búsqueda)
 export interface ClientSummary {
-  dniCliente: string;
-  nombreCliente: string;
-  apellidoCliente: string;
-  // Nuevos campos para Persona Jurídica
-  ruc?: string;
-  razonSocial?: string;
-  tipo: "NATURAL" | "JURIDICA";
-  tienePrestamoActivo: boolean;
+    dniCliente?: string; // Opcional, puede ser RUC
+    ruc?: string;        // Opcional, puede ser DNI
+    razonSocial?: string;
+    nombreCliente?: string;
+    apellidoCliente?: string;
+    tipo: "NATURAL" | "JURIDICA";
+    tienePrestamoActivo: boolean;
 }
 
-/**
-
-Representa la información detallada del cliente para el formulario de registro/préstamo.
-
-Corresponde al DTO ClienteDetalleDto del backend.
-*/
+// Usado en el Formulario de Préstamo (Detalles completos)
 export interface ClientDetail {
-  idCliente: String | null; // Puede ser null para nuevos clientes
-  dniCliente?: string;
-  nombreCliente?: string;
-  apellidoCliente?: string;
-  // Campos para Persona Jurídica
-  ruc?: string;
-  razonSocial?: string;
-  fechaConstitucion?: string | null;
-  representanteLegalDni?: string;
-  representanteLegalNombre?: string;
-  
-  fechaNacimiento: string | null; // El backend puede enviarlo como string (ISO format)
-  esPep: boolean | null;
-  correoCliente: string | null;
-  telefonoCliente: string | null;
-  direccionCliente: string | null;
-  direccionFiscal?: string | null; // Nuevo campo para dirección fiscal
-  tipo: "NATURAL" | "JURIDICA";
-  esNuevo: boolean; // Flag para controlar la UI
+    idCliente: number | null; // Null si es nuevo
+    tipo: "NATURAL" | "JURIDICA";
+    esNuevo: boolean;
+
+    // Datos Persona Natural
+    dniCliente?: string;
+    nombreCliente?: string;
+    apellidoCliente?: string;
+    fechaNacimiento?: string; // ISO String (YYYY-MM-DD)
+    esPep?: boolean;
+
+    // Datos Persona Jurídica
+    ruc?: string;
+    razonSocial?: string;
+    direccionFiscal?: string;
+    fechaConstitucion?: string; // ISO String
+    representanteLegalDni?: string;
+    representanteLegalNombre?: string;
+
+    // Datos de Contacto Comunes
+    correoCliente: string;
+    telefonoCliente: string;
+    direccionCliente: string;
 }

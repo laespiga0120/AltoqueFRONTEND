@@ -41,12 +41,14 @@ import {
   ArrowLeft,
   User,
   Loader2,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Loan, PaymentInstallment } from "../types/loan";
-import { loanService } from "../api/loanService";
+import { Loan } from "../types/loan";
+// Importamos la interfaz localmente o desde el servicio actualizado
+import { loanService, PaymentInstallment } from "../api/loanService";
 import { notificationService } from "../api/notificationService";
-import { calculateLoanSchedule } from "../lib/scheduleCalculator";
+// Eliminado: import { calculateLoanSchedule } from "../lib/scheduleCalculator";
 
 export default function LoanDetails() {
   const location = useLocation();
@@ -60,6 +62,7 @@ export default function LoanDetails() {
   const [customEmail, setCustomEmail] = useState("");
   const [scheduleSent, setScheduleSent] = useState(false);
 
+  // 1. Cargar Préstamo
   useEffect(() => {
     const fetchLoan = async () => {
       if (!id) {
@@ -84,17 +87,24 @@ export default function LoanDetails() {
     }
   }, [id, loan, navigate]);
 
+  // 2. Cargar Cronograma (MODIFICADO: Ahora desde Backend)
   useEffect(() => {
     if (loan) {
-      const calculatedSchedule = calculateLoanSchedule(
-        loan.monto,
-        loan.tasaInteresAnual,
-        loan.fechaPrestamo,
-        loan.numeroCuotas
-      );
-      setSchedule(calculatedSchedule);
-      // Pre-popula el campo de email con el del cliente
+      // Pre-popula el email
       setCustomEmail(loan.cliente.correoCliente || "");
+
+      const loadSchedule = async () => {
+        try {
+            // Llamada al nuevo servicio backend
+            const backendSchedule = await loanService.getSchedule(loan.idPrestamo);
+            setSchedule(backendSchedule);
+        } catch (error) {
+            console.error("Error cargando cronograma:", error);
+            toast.error("No se pudo cargar el cronograma actualizado.");
+        }
+      };
+      
+      loadSchedule();
     }
   }, [loan]);
 
@@ -103,15 +113,15 @@ export default function LoanDetails() {
     if (!loan) return;
     const toastId = toast.loading("Descargando documentos...");
     try {
-      // Llama a ambos servicios de descarga en paralelo
+      // Llama a ambos servicios de descarga en paralelo (endpoints backend)
       await Promise.all([
         loanService.downloadContractPdf(
           loan.idPrestamo,
-          loan.cliente.dniCliente
+          loan.cliente.dniCliente || loan.cliente.ruc
         ),
         loanService.downloadSchedulePdf(
           loan.idPrestamo,
-          loan.cliente.dniCliente
+          loan.cliente.dniCliente || loan.cliente.ruc
         ),
       ]);
       toast.success("Contrato y cronograma descargados.", { id: toastId });
@@ -163,6 +173,13 @@ export default function LoanDetails() {
     0
   );
 
+  // Lógica de visualización Cliente (Jurídica/Natural)
+  const isJuridica = loan.cliente.tipo === "JURIDICA" || !!loan.cliente.ruc;
+  const clientName = isJuridica 
+    ? loan.cliente.razonSocial 
+    : `${loan.cliente.nombreCliente} ${loan.cliente.apellidoCliente}`;
+  const documentId = isJuridica ? loan.cliente.ruc : loan.cliente.dniCliente;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -200,7 +217,7 @@ export default function LoanDetails() {
           <CardHeader>
             <div className="flex items-center gap-3">
               <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20">
-                <User className="h-6 w-6 text-primary" />
+                {isJuridica ? <Building2 className="h-6 w-6 text-primary" /> : <User className="h-6 w-6 text-primary" />}
               </div>
               <CardTitle className="text-xl">Información del Cliente</CardTitle>
             </div>
@@ -208,18 +225,18 @@ export default function LoanDetails() {
           <CardContent className="space-y-4">
             <div className="p-4 rounded-xl bg-secondary/30">
               <Label className="text-sm font-semibold text-muted-foreground">
-                DNI
+                {isJuridica ? "RUC" : "DNI"}
               </Label>
               <p className="text-xl font-bold text-foreground">
-                {loan.cliente.dniCliente}
+                {documentId}
               </p>
             </div>
             <div className="p-4 rounded-xl bg-secondary/30">
               <Label className="text-sm font-semibold text-muted-foreground">
-                Nombre Completo
+                {isJuridica ? "Razón Social" : "Nombre Completo"}
               </Label>
               <p className="text-xl font-bold text-foreground">
-                {`${loan.cliente.nombreCliente} ${loan.cliente.apellidoCliente}`}
+                {clientName}
               </p>
             </div>
             {loan.cliente.esPep && (
@@ -283,6 +300,7 @@ export default function LoanDetails() {
                     year: "numeric",
                     month: "long",
                     day: "numeric",
+                    timeZone: "UTC" // Corrección zona horaria
                   })}
                 </p>
               </div>
@@ -381,10 +399,11 @@ export default function LoanDetails() {
                   <TableHead className="font-bold text-base text-right">
                     Monto Total
                   </TableHead>
+                  <TableHead className="font-bold text-base text-center">Estado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {schedule.map((payment) => (
+                {schedule.length > 0 ? schedule.map((payment) => (
                   <TableRow
                     key={payment.installmentNumber}
                     className="hover:bg-secondary/20"
@@ -397,6 +416,7 @@ export default function LoanDetails() {
                         year: "numeric",
                         month: "long",
                         day: "numeric",
+                        timeZone: "UTC" // Importante para evitar desfase de fechas
                       })}
                     </TableCell>
                     <TableCell className="text-right font-bold text-lg text-primary">
@@ -405,8 +425,18 @@ export default function LoanDetails() {
                         minimumFractionDigits: 2,
                       })}
                     </TableCell>
+                    <TableCell className="text-center">
+                        <Badge variant={payment.state === "PAGADO" ? "default" : "outline"}
+                            className={payment.state === "PENDIENTE" ? "border-yellow-500 text-yellow-600 bg-yellow-50" : ""}>
+                            {payment.state}
+                        </Badge>
+                    </TableCell>
                   </TableRow>
-                ))}
+                )) : (
+                    <TableRow>
+                        <TableCell colSpan={4} className="text-center py-4">No se encontró el cronograma</TableCell>
+                    </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>
