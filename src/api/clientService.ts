@@ -45,7 +45,94 @@ export const clientService = {
       // El backend devuelve un 404 si no lo encuentra, lo que se convierte en un error aquí.
       throw new Error("Cliente no encontrado o DNI inválido.");
     }
-    return response.json();
+    const data = await response.json();
+    return {
+      ...data,
+      tipo: "NATURAL", // Por defecto es Natural si viene de este endpoint
+    };
+  },
+
+  searchByRUC: async (ruc: string): Promise<ClientSummary> => {
+    // MOCK DATA para RUC
+    // Simulación: Si el RUC es "20600000001", devolvemos una empresa con préstamo activo.
+    // Si es "20600000002", devolvemos una empresa sin préstamo.
+    // Cualquier otro RUC lanza error (no encontrado).
+
+    await new Promise((resolve) => setTimeout(resolve, 800)); // Simular delay de network
+
+    if (ruc === "20600000001") {
+      return {
+        ruc: "20600000001",
+        razonSocial: "EMPRESA MOCK S.A.C.",
+        dniCliente: "", // No aplica
+        nombreCliente: "", // No aplica
+        apellidoCliente: "", // No aplica
+        tipo: "JURIDICA",
+        tienePrestamoActivo: true,
+      };
+    }
+
+    if (ruc === "20600000002") {
+      return {
+        ruc: "20600000002",
+        razonSocial: "SOLUCIONES TECNOLOGICAS E.I.R.L.",
+        dniCliente: "",
+        nombreCliente: "",
+        apellidoCliente: "",
+        tipo: "JURIDICA",
+        tienePrestamoActivo: false,
+      };
+    }
+
+    throw new Error("Cliente jurídico no encontrado.");
+  },
+
+  getDetailsByRUC: async (ruc: string): Promise<ClientDetail> => {
+     // MOCK DATA para Detalles de RUC
+     // Si es nuevo (cualquiera que no sea los mocks conocidos), devolvemos vacio/nuevo
+     await new Promise((resolve) => setTimeout(resolve, 500)); 
+
+     if (ruc === "20600000002") {
+        return {
+           idCliente: "MCK-002",
+           ruc: "20600000002",
+           razonSocial: "SOLUCIONES TECNOLOGICAS E.I.R.L.",
+           direccionFiscal: "AV. MOCK 123",
+           fechaConstitucion: "2020-01-01T00:00:00",
+           representanteLegalDni: "40000000",
+           representanteLegalNombre: "JUAN MOCK",
+           tipo: "JURIDICA",
+           esNuevo: false,
+           // Campos requeridos por interfaz pero pueden ser null/vacios en PJ si no aplican
+           dniCliente: "",
+           nombreCliente: "",
+           apellidoCliente: "",
+           fechaNacimiento: null,
+           esPep: false,
+           correoCliente: "contacto@soluciones.mock",
+           telefonoCliente: "999000000",
+           direccionCliente: "AV. MOCK 123",
+        };
+     }
+     
+     // Caso nuevo cliente (no registrado)
+     return {
+        idCliente: null,
+        ruc: ruc,
+        razonSocial: "",
+        direccionFiscal: "",
+        tipo: "JURIDICA",
+        esNuevo: true,
+        // defaults
+        dniCliente: "",
+        nombreCliente: "",
+        apellidoCliente: "",
+        fechaNacimiento: null,
+        esPep: false,
+        correoCliente: "",
+        telefonoCliente: "",
+        direccionCliente: "",
+     };
   },
 
   getDetailsByDNI: async (dni: string): Promise<ClientDetail> => {
@@ -54,7 +141,11 @@ export const clientService = {
     );
     if (!response.ok)
       throw new Error("No se pudieron obtener los detalles del cliente");
-    return response.json();
+    const data = await response.json();
+    return {
+      ...data,
+      tipo: data.tipo || "NATURAL", // Asegurar que tenga tipo
+    };
   },
 
   registerOrUpdate: async (

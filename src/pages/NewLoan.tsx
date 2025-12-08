@@ -56,6 +56,14 @@ export default function NewLoan() {
     correoCliente: "",
     telefonoCliente: "",
     esPep: false,
+    // Estado para Persona Jurídica
+    ruc: "",
+    razonSocial: "",
+    direccionFiscal: "",
+    fechaConstitucion: "",
+    representanteLegalDni: "",
+    representanteLegalNombre: "",
+    cargoRepresentante: "",
   });
   const [loanState, setLoanState] = useState({
     amount: "",
@@ -71,8 +79,9 @@ export default function NewLoan() {
   const exceedsUIT = parseFloat(loanState.amount) > UIT_VALUE;
 
   useEffect(() => {
-    if (!clientSummary?.dniCliente) {
-      toast.error("No se ha proporcionado un DNI de cliente válido.");
+    // Validación: debe tener DNI o RUC
+    if (!clientSummary?.dniCliente && !clientSummary?.ruc) {
+      toast.error("No se ha proporcionado un documento de identidad válido.");
       navigate("/");
       return;
     }
@@ -80,9 +89,16 @@ export default function NewLoan() {
     const fetchClientDetails = async () => {
       try {
         setLoadingClientDetails(true);
-        const data = await clientService.getDetailsByDNI(
-          clientSummary.dniCliente
-        );
+        let data: ClientDetail;
+        
+        if (clientSummary.tipo === 'JURIDICA' && clientSummary.ruc) {
+           data = await clientService.getDetailsByRUC(clientSummary.ruc);
+        } else if (clientSummary.dniCliente) {
+           data = await clientService.getDetailsByDNI(clientSummary.dniCliente);
+        } else {
+           throw new Error("Identificador de cliente no válido");
+        }
+
         setClientDetails(data);
         setFormState({
           direccionCliente: data.direccionCliente || "",
@@ -92,6 +108,16 @@ export default function NewLoan() {
           correoCliente: data.correoCliente || "",
           telefonoCliente: data.telefonoCliente || "",
           esPep: data.esPep || false,
+          // Mapeo de datos de PJ
+          ruc: data.ruc || "",
+          razonSocial: data.razonSocial || "",
+          direccionFiscal: data.direccionFiscal || "",
+          fechaConstitucion: data.fechaConstitucion
+            ? data.fechaConstitucion.split("T")[0]
+            : "",
+          representanteLegalDni: data.representanteLegalDni || "",
+          representanteLegalNombre: data.representanteLegalNombre || "",
+          cargoRepresentante: "", // Si hubiese
         });
 
         if (!data.esNuevo) {
@@ -99,6 +125,7 @@ export default function NewLoan() {
           toast.info("Cliente ya registrado. Se ha cargado su información.");
         }
       } catch (error) {
+        console.error(error);
         toast.error(
           "No se pudo cargar la información del cliente. Intente de nuevo."
         );
@@ -162,20 +189,48 @@ export default function NewLoan() {
   const handleRegisterClient = async () => {
     if (!clientDetails) return;
 
-    if (
-      !formState.direccionCliente ||
-      !formState.fechaNacimiento ||
-      !formState.correoCliente ||
-      !formState.telefonoCliente
-    ) {
-      toast.error(
-        "Todos los campos de información del cliente son obligatorios."
-      );
-      return;
-    }
-    if (!isOfLegalAge(formState.fechaNacimiento)) {
-      toast.error("El cliente debe ser mayor de 18 años.");
-      return;
+    if (!clientDetails) return;
+    
+    // VALIDACIÓN DIFERENCIADA
+    const isJuridica = clientDetails.tipo === "JURIDICA";
+
+    if (isJuridica) {
+      if (
+        !formState.ruc ||
+        !formState.razonSocial ||
+        !formState.direccionFiscal ||
+        !formState.fechaConstitucion ||
+        !formState.representanteLegalDni ||
+        !formState.representanteLegalNombre
+      ) {
+         toast.error("Todos los campos de la empresa son obligatorios.");
+         return;
+      }
+      if (formState.ruc.length !== 11) {
+        toast.error("El RUC debe tener 11 dígitos.");
+        return;
+      }
+      if(formState.representanteLegalDni.length !== 8){
+        toast.error("El DNI del representante debe tener 8 dígitos.");
+        return;
+      }
+    } else {
+      // Validación Persona Natural
+      if (
+        !formState.direccionCliente ||
+        !formState.fechaNacimiento ||
+        !formState.correoCliente ||
+        !formState.telefonoCliente
+      ) {
+        toast.error(
+          "Todos los campos de información del cliente son obligatorios."
+        );
+        return;
+      }
+      if (!isOfLegalAge(formState.fechaNacimiento)) {
+        toast.error("El cliente debe ser mayor de 18 años.");
+        return;
+      }
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formState.correoCliente)) {
@@ -318,7 +373,131 @@ export default function NewLoan() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {clientDetails.tipo === "JURIDICA" ? (
+               /* --- FORMULARIO PERSONA JURIDICA --- */
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30">
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">
+                      RUC
+                    </Label>
+                    <Input
+                       id="ruc"
+                       value={formState.ruc || clientDetails.ruc || ""} 
+                       onChange={handleFormChange}
+                       className="mt-2 h-12 text-base font-bold"
+                       disabled={areClientFieldsDisabled || !!clientDetails.ruc} // RUC suele ser inmutable si ya viene
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">
+                      Razón Social
+                    </Label>
+                    <Input
+                       id="razonSocial"
+                       value={formState.razonSocial} 
+                       onChange={handleFormChange}
+                       className="mt-2 h-12 text-base font-bold"
+                       disabled={areClientFieldsDisabled}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30">
+                   <div>
+                    <Label htmlFor="direccionFiscal" className="text-sm font-semibold text-muted-foreground">
+                      Dirección Fiscal
+                    </Label>
+                    <Input
+                      id="direccionFiscal"
+                      value={formState.direccionFiscal || ""}
+                      onChange={handleFormChange}
+                      className="mt-2 h-12 text-base"
+                      disabled={areClientFieldsDisabled}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="fechaConstitucion" className="text-sm font-semibold text-muted-foreground">
+                      Fecha de Constitución
+                    </Label>
+                    <Input
+                      id="fechaConstitucion"
+                      type="date"
+                      value={formState.fechaConstitucion || ""}
+                      onChange={handleFormChange}
+                      className="mt-2 h-12 text-base"
+                      disabled={areClientFieldsDisabled}
+                    />
+                  </div>
+                </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30">
+                   <div>
+                    <Label htmlFor="representanteLegalDni" className="text-sm font-semibold text-muted-foreground">
+                      DNI Representante Legal
+                    </Label>
+                    <Input
+                      id="representanteLegalDni"
+                      value={formState.representanteLegalDni || ""}
+                      onChange={(e) => {
+                         const val = e.target.value.replace(/\D/g, "").slice(0, 8);
+                         setFormState(prev => ({...prev, representanteLegalDni: val}));
+                      }}
+                      className="mt-2 h-12 text-base"
+                      disabled={areClientFieldsDisabled}
+                      maxLength={8}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="representanteLegalNombre" className="text-sm font-semibold text-muted-foreground">
+                      Nombre Representante Legal
+                    </Label>
+                    <Input
+                      id="representanteLegalNombre"
+                      value={formState.representanteLegalNombre || ""}
+                      onChange={handleFormChange}
+                      className="mt-2 h-12 text-base"
+                      disabled={areClientFieldsDisabled}
+                    />
+                  </div>
+                </div>
+                 {/* Reutilizamos campos comunes si es necesario, e.g. telefono/correo de contacto de la empresa */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-secondary/30">
+                    <div>
+                    <Label htmlFor="correoCliente" className="text-sm font-semibold text-muted-foreground">
+                      Correo Electrónico (Contacto)
+                    </Label>
+                    <Input
+                      id="correoCliente"
+                      type="email"
+                      value={formState.correoCliente}
+                      onChange={handleFormChange}
+                      className="mt-2 h-12 text-base"
+                      disabled={areClientFieldsDisabled}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="telefonoCliente" className="text-sm font-semibold text-muted-foreground">
+                      Teléfono (Contacto)
+                    </Label>
+                    <Input
+                      id="telefonoCliente"
+                      type="tel"
+                      value={formState.telefonoCliente}
+                      onChange={handleFormChange}
+                      className="mt-2 h-12 text-base"
+                      disabled={areClientFieldsDisabled}
+                      maxLength={9}
+                    />
+                  </div>
+                 </div>
+
+              </div>
+            ) : (
+                /* --- FORMULARIO PERSONA NATURAL (EXISTENTE) --- */
+              <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 rounded-2xl bg-secondary/30">
+            {/* ...resto del form natural... */}
               <div>
                 <Label className="text-sm font-semibold text-muted-foreground">
                   DNI
@@ -417,7 +596,7 @@ export default function NewLoan() {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-4 p-6 rounded-2xl bg-secondary/30 border border-primary/20">
+             <div className="flex items-center gap-4 p-6 rounded-2xl bg-secondary/30 border border-primary/20">
               <Checkbox
                 id="esPep"
                 checked={formState.esPep}
@@ -447,6 +626,8 @@ export default function NewLoan() {
                 </Button>
               )}
             </div>
+            </>
+            )}
             {!isClientRegistered && (
               <div className="flex justify-end pt-4">
                 <Button

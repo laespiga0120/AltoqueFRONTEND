@@ -68,17 +68,28 @@ export default function Dashboard() {
 
   const handleSearchClient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchDNI.length !== 8) {
-      toast.error("El DNI debe tener 8 dígitos");
+    if (searchDNI.length !== 8 && searchDNI.length !== 11) {
+      toast.error("Debe ingresar un DNI (8 dígitos) o RUC (11 dígitos)");
       return;
     }
     setLoading(true);
     setClient(null);
     setSearched(false);
     try {
-      const result = await clientService.searchByDNI(searchDNI);
+      let result;
+      if (searchDNI.length === 11) {
+        // Búsqueda por RUC (MOCK)
+        result = await clientService.searchByRUC(searchDNI);
+      } else {
+        // Búsqueda por DNI (Existente)
+        result = await clientService.searchByDNI(searchDNI);
+      }
       setClient(result);
-      toast.success("Cliente encontrado correctamente");
+      toast.success(
+        result.tipo === "JURIDICA"
+          ? "Empresa encontrada correctamente"
+          : "Cliente encontrado correctamente"
+      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Ocurrió un error inesperado."
@@ -146,7 +157,7 @@ export default function Dashboard() {
           <form onSubmit={handleSearchClient} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="searchDNI" className="text-base font-semibold">
-                Número de DNI del Cliente
+                Número de Documento (DNI o RUC)
               </Label>
               <div className="flex gap-3">
                 <Input
@@ -155,18 +166,20 @@ export default function Dashboard() {
                   placeholder="Ej: 01234567"
                   value={searchDNI}
                   onChange={(e) => {
-                    const value = e.target.value.replace(/\D/g, "").slice(0, 8);
+                    const value = e.target.value.replace(/\D/g, "").slice(0, 11);
                     setSearchDNI(value);
                     setClient(null);
                     setSearched(false);
                   }}
                   required
-                  maxLength={8}
+                  maxLength={11}
                   className="h-12 text-base"
                 />
                 <Button
                   type="submit"
-                  disabled={loading || searchDNI.length !== 8}
+                  disabled={
+                    loading || (searchDNI.length !== 8 && searchDNI.length !== 11)
+                  }
                   className="gap-2 px-8 h-12 text-base font-semibold bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-all duration-300 shadow-lg"
                 >
                   <Search className="h-5 w-5" />
@@ -191,10 +204,15 @@ export default function Dashboard() {
                   )}
                   <div className="flex-1">
                     <h3 className="text-xl font-bold text-foreground mb-1">
-                      {client.nombreCliente} {client.apellidoCliente}
+                      {client.tipo === "JURIDICA"
+                        ? client.razonSocial
+                        : `${client.nombreCliente} ${client.apellidoCliente}`}
                     </h3>
                     <p className="text-muted-foreground font-medium">
-                      DNI: {client.dniCliente}
+                      {client.tipo === "JURIDICA" ? "RUC" : "DNI"}:{" "}
+                      {client.tipo === "JURIDICA"
+                        ? client.ruc
+                        : client.dniCliente}
                     </p>
                   </div>
                 </div>
@@ -206,8 +224,9 @@ export default function Dashboard() {
                   >
                     <AlertCircle className="h-5 w-5" />
                     <AlertDescription className="font-semibold text-base">
-                      Este cliente ya tiene un préstamo activo. No puede
-                      registrar uno nuevo hasta cancelar el actual.
+                      {client.tipo === "JURIDICA"
+                        ? "Esta empresa ya tiene un préstamo activo. No puede registrar uno nuevo hasta cancelar el actual."
+                        : "Este cliente ya tiene un préstamo activo. No puede registrar uno nuevo hasta cancelar el actual."}
                     </AlertDescription>
                   </Alert>
                 ) : (
@@ -215,7 +234,10 @@ export default function Dashboard() {
                     <Alert className="border-primary/50 bg-primary/5 mb-4">
                       <UserCheck className="h-5 w-5 text-primary" />
                       <AlertDescription className="font-semibold text-primary text-base">
-                        ✓ Cliente disponible para registrar un nuevo préstamo
+                        ✓{" "}
+                        {client.tipo === "JURIDICA"
+                          ? "Empresa disponible para registrar un nuevo préstamo"
+                          : "Cliente disponible para registrar un nuevo préstamo"}
                       </AlertDescription>
                     </Alert>
                     <Button
@@ -239,9 +261,37 @@ export default function Dashboard() {
             >
               <AlertCircle className="h-5 w-5" />
               <AlertDescription className="text-base font-semibold">
-                No se encontró información del cliente con DNI: {searchDNI}
+                No se encontró información para el documento: {searchDNI}
               </AlertDescription>
             </Alert>
+          )}
+
+          {/* Bloque para cuando no se encuentra el cliente y se permite continuar anyway (simulando comportamiento descrito) */}
+          {searched && !client && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 mt-4">
+              <Button
+                onClick={() => {
+                  // Navegar con datos parciales para rellenar
+                  const isRuc = searchDNI.length === 11;
+                  const partialClient = {
+                    dniCliente: isRuc ? "" : searchDNI,
+                    ruc: isRuc ? searchDNI : "",
+                    nombreCliente: "",
+                    apellidoCliente: "",
+                    razonSocial: "",
+                    tipo: isRuc ? "JURIDICA" : "NATURAL",
+                    tienePrestamoActivo: false,
+                  };
+                  // @ts-ignore - Enviamos partialClient que cumple con ClientSummary en tiempo de ejecucion aunque le falten campos vacios
+                  navigate("/loans/new", { state: { client: partialClient } });
+                }}
+                size="lg"
+                className="w-full h-14 text-lg font-bold bg-secondary hover:bg-secondary/80 text-foreground transition-all duration-300 shadow-lg"
+              >
+                <PlusCircle className="h-5 w-5 mr-2" />
+                Registrar Nuevo Cliente {searchDNI.length === 11 ? "Jurídico" : ""}
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
