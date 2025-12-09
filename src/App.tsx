@@ -12,6 +12,7 @@ import CashRegister from "./pages/CashRegister";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import PaymentStatus from "./pages/PaymentStatus";
 
 const queryClient = new QueryClient();
 
@@ -73,6 +74,39 @@ const App = () => (
               </ProtectedRoute>
             }
           />
+          
+          {/* Rutas de retorno de Mercado Pago */}
+          <Route
+            path="/pagos/exito"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <PaymentStatus status="success" />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/pagos/fallo"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <PaymentStatus status="failure" />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/pagos/pendiente"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <PaymentStatus status="pending" />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

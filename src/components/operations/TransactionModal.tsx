@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import {
-    Banknote, Smartphone, Printer, Mail, CheckCircle2, RotateCcw, Receipt, CreditCard
+    Banknote,
+    Printer,
+    Mail,
+    CheckCircle2,
+    RotateCcw,
+    Receipt,
+    Globe
 } from 'lucide-react';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -13,8 +19,9 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { ClientAccount, PaymentMethod, PaymentResponse } from '@/types/operations';
 import { formatCurrency, calculateRounding} from '@/lib/operationsData';
-import { cn } from '@/lib/utils';
 import { operationsService } from '@/api/operationsService';
+// Importamos el componente que acabamos de crear
+import { MercadoPagoButton } from '@/components/MercadoPagoButton';
 
 interface TransactionModalProps {
     open: boolean;
@@ -28,30 +35,25 @@ type Step = 'input' | 'success';
 export function TransactionModal({ open, onClose, account, onSuccess }: TransactionModalProps) {
     const [step, setStep] = useState<Step>('input');
     const [amount, setAmount] = useState('');
-    const [method, setMethod] = useState<PaymentMethod>('EFECTIVO');
+    const [tab, setTab] = useState<string>('EFECTIVO');
+    
     const [processing, setProcessing] = useState(false);
     const [paymentResult, setPaymentResult] = useState<PaymentResponse | null>(null);
 
-    const totalPendingDebt = account.deudaPendienteTotal;
+    const totalPendingDebt = account?.deudaPendienteTotal || 0;
     const parsedAmount = parseFloat(amount) || 0;
-    
-    // Cálculo de redondeo (visual)
     const { adjustment, rounded } = calculateRounding(parsedAmount);
-    const isCash = method === 'EFECTIVO';
 
-    // Sugerencias de montos
     const suggestedAmounts = [
         { label: 'Deuda Total', value: totalPendingDebt },
     ].filter(s => s.value > 0);
     
-    // Buscar la cuota más antigua pendiente para sugerir su pago
-    // Usamos 'totalAPagar' que viene calculado del backend (capital + mora)
-    const currentInstallment = account.cuotas.find(c => c.totalAPagar > 0);
+    const currentInstallment = account?.cuotas?.find(c => c.totalAPagar > 0);
     if (currentInstallment) {
         suggestedAmounts.unshift({ label: 'Cuota Actual', value: currentInstallment.totalAPagar });
     }
 
-    const handleProcess = async () => {
+    const handleCashProcess = async () => {
         if (parsedAmount <= 0) {
             toast.error('Ingrese un monto válido');
             return;
@@ -66,7 +68,7 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
             const response = await operationsService.processPayment({
                 prestamoId: account.prestamoId,
                 monto: parsedAmount,
-                metodoPago: method
+                metodoPago: 'EFECTIVO' as PaymentMethod 
             });
 
             setPaymentResult(response);
@@ -75,7 +77,7 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
             onSuccess(); 
         } catch (error) {
             console.error(error);
-            toast.error('Error procesando pago', { description: 'Verifique su conexión.' });
+            toast.error('Error registrando pago');
         } finally {
             setProcessing(false);
         }
@@ -84,7 +86,7 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
     const handleNewOperation = () => {
         setStep('input');
         setAmount('');
-        setMethod('EFECTIVO');
+        setTab('EFECTIVO');
         setPaymentResult(null);
         onClose();
     };
@@ -93,6 +95,8 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
         if (step === 'success') handleNewOperation();
         else onClose();
     };
+
+    if (!account) return null;
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
@@ -113,15 +117,19 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                             </p>
                         </div>
 
-                        <Tabs value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
-                            <TabsList className="grid w-full grid-cols-4 h-12">
-                                <TabsTrigger value="EFECTIVO"><Banknote className="h-4 w-4 mr-2"/>Efectivo</TabsTrigger>
-                                <TabsTrigger value="YAPE"><Smartphone className="h-4 w-4 mr-2"/>Yape</TabsTrigger>
-                                <TabsTrigger value="PLIN"><Smartphone className="h-4 w-4 mr-2"/>Plin</TabsTrigger>
-                                <TabsTrigger value="TARJETA"><CreditCard className="h-4 w-4 mr-2"/>Tarjeta</TabsTrigger>
+                        <Tabs value={tab} onValueChange={setTab}>
+                            <TabsList className="grid w-full grid-cols-2 h-12">
+                                <TabsTrigger value="EFECTIVO">
+                                    <Banknote className="h-4 w-4 mr-2"/>
+                                    Efectivo
+                                </TabsTrigger>
+                                <TabsTrigger value="ONLINE">
+                                    <Globe className="h-4 w-4 mr-2"/>
+                                    Online
+                                </TabsTrigger>
                             </TabsList>
 
-                            <TabsContent value={method} className="mt-4 space-y-4">
+                            <div className="mt-4 space-y-4">
                                 <div className="space-y-2">
                                     <Label className="text-base font-semibold">Monto a Pagar</Label>
                                     <Input
@@ -147,11 +155,13 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                                         </Badge>
                                     ))}
                                 </div>
+                            </div>
 
-                                {isCash && parsedAmount > 0 && (
+                            <TabsContent value="EFECTIVO" className="space-y-4 mt-4">
+                                {parsedAmount > 0 && (
                                     <div className="p-4 rounded-xl bg-secondary/50 border-2 border-dashed border-border space-y-3 font-mono text-sm">
                                         <div className="flex items-center gap-2 text-muted-foreground font-sans text-sm font-semibold">
-                                            <Receipt className="h-4 w-4"/> Simulación de Cobro
+                                            <Receipt className="h-4 w-4"/> Simulación Caja
                                         </div>
                                         <div className="flex justify-between">
                                             <span>Subtotal:</span><span>{formatCurrency(parsedAmount)}</span>
@@ -167,14 +177,28 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                                         </div>
                                     </div>
                                 )}
-
                                 <Button
-                                    onClick={handleProcess}
+                                    onClick={handleCashProcess}
                                     disabled={processing || parsedAmount <= 0}
-                                    className="w-full h-14 text-lg font-bold bg-gradient-to-r from-primary to-accent"
+                                    className="w-full h-12 text-lg font-bold"
                                 >
-                                    {processing ? 'Procesando...' : 'Confirmar Pago'}
+                                    {processing ? 'Procesando...' : 'Cobrar Efectivo'}
                                 </Button>
+                            </TabsContent>
+
+                            <TabsContent value="ONLINE" className="space-y-4 mt-4">
+                                <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900">
+                                    <p className="text-sm text-center text-blue-600 dark:text-blue-400 mb-2">
+                                        Pasarela de pagos segura
+                                    </p>
+                                    {/* Botón Integrado de Mercado Pago */}
+                                    <MercadoPagoButton 
+                                        loanId={account.prestamoId}
+                                        amount={parsedAmount}
+                                        clientName={account.clienteNombre}
+                                        disabled={parsedAmount <= 0}
+                                    />
+                                </div>
                             </TabsContent>
                         </Tabs>
                     </div>
@@ -184,41 +208,13 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                             <div className="p-4 rounded-full bg-green-100 mb-4">
                                 <CheckCircle2 className="h-16 w-16 text-green-600" />
                             </div>
-                            <h3 className="text-2xl font-bold text-green-600">¡Pago Exitoso!</h3>
+                            <h3 className="text-2xl font-bold text-green-600">¡Pago Registrado!</h3>
+                            <p className="text-muted-foreground">Operación completada</p>
                         </div>
-
-                        {paymentResult && (
-                            <div className="p-4 rounded-xl bg-secondary/30 border border-border/50 space-y-2 font-mono text-sm">
-                                <div className="flex justify-between">
-                                    <span>Monto Aplicado:</span>
-                                    <span className="font-bold text-primary">{formatCurrency(paymentResult.montoAplicado)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Deuda Restante:</span>
-                                    <span className="font-bold text-destructive">{formatCurrency(paymentResult.deudaRestante)}</span>
-                                </div>
-                                {paymentResult.detallesCobertura.length > 0 && (
-                                    <div className="mt-4 pt-4 border-t border-border/50">
-                                        <p className="font-sans font-semibold mb-2 text-xs text-muted-foreground">DETALLE:</p>
-                                        <ul className="list-disc list-inside space-y-1 text-xs text-muted-foreground">
-                                            {paymentResult.detallesCobertura.map((line, idx) => (
-                                                <li key={idx}>{line}</li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
+                        {/* Detalles del pago exitoso ... */}
                         <div className="grid grid-cols-1 gap-3">
-                            <Button onClick={() => window.print()} variant="outline" size="lg" className="gap-2">
-                                <Printer className="h-5 w-5"/> Imprimir Voucher
-                            </Button>
-                            <Button onClick={() => toast.success('Enviado')} variant="outline" size="lg" className="gap-2">
-                                <Mail className="h-5 w-5"/> Enviar por Correo
-                            </Button>
-                            <Button onClick={handleNewOperation} size="lg" className="bg-gradient-to-r from-primary to-accent text-white gap-2">
-                                <RotateCcw className="h-5 w-5"/> Nueva Operación
+                            <Button onClick={handleNewOperation} size="lg" className="w-full">
+                                <RotateCcw className="h-5 w-5 mr-2"/> Nueva Operación
                             </Button>
                         </div>
                     </div>
