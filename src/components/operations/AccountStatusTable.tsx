@@ -1,4 +1,4 @@
-import { Info, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Info, AlertTriangle, CheckCircle, Clock, CalendarClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
     Table,
@@ -14,55 +14,32 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { ClientAccount, AccountInstallment, PaymentStatus } from '@/types/operations';
+import { AccountStatus, CuotaEstado } from '@/types/operations';
 import { formatCurrency } from '@/lib/operationsData';
 
 interface AccountStatusTableProps {
-    account: ClientAccount;
+    account: AccountStatus;
 }
 
-const statusConfig: Record<PaymentStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success'; icon: any }> = {
-    paid: {
-        label: 'Pagado',
-        variant: 'success', // We might need to add this variant to badge or use a standard one
-        icon: CheckCircle,
-    },
-    current: {
-        label: 'PENDIENTE de pago',
-        variant: 'secondary',
-        icon: Clock,
-    },
-    pending: {
-        label: 'Pendiente',
-        variant: 'outline',
-        icon: Clock,
-    },
-    stopped_interest: {
-        label: 'Mora Detenida',
-        variant: 'default',
-        icon: AlertTriangle,
-    },
-    overdue: {
-        label: 'Mora Activa (1%)',
-        variant: 'destructive',
-        icon: AlertTriangle,
-    },
+// Mapeo de estados del Backend a configuración visual
+const getStatusConfig = (status: string) => {
+    const normalized = status.toLowerCase();
+    if (normalized.includes('pagado')) return { label: 'Pagado', variant: 'success', icon: CheckCircle, className: 'bg-green-600 hover:bg-green-700' };
+    if (normalized.includes('mora activa')) return { label: status, variant: 'destructive', icon: AlertTriangle, className: '' };
+    if (normalized.includes('adelanto')) return { label: 'Adelanto', variant: 'secondary', icon: CheckCircle, className: 'bg-blue-500/15 text-blue-700 hover:bg-blue-500/25' };
+    return { label: 'Pendiente', variant: 'outline', icon: Clock, className: '' };
 };
 
 export function AccountStatusTable({ account }: AccountStatusTableProps) {
-    if (account.installments.length === 0) {
+    if (!account.cuotas || account.cuotas.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <CheckCircle className="h-12 w-12 mb-4 text-primary" />
                 <p className="text-lg font-semibold">Sin deuda pendiente</p>
-                <p className="text-sm">Este cliente no tiene préstamos activos</p>
+                <p className="text-sm">Este cliente no tiene cuotas registradas.</p>
             </div>
         );
     }
-
-    // Calculate totals
-    const totalOriginalDebt = account.installments.reduce((sum, inst) => sum + inst.originalAmount, 0);
-    const totalPendingDebt = account.installments.reduce((sum, inst) => sum + inst.pendingBalance, 0);
 
     return (
         <div className="rounded-xl border border-border/50 overflow-hidden bg-card/50">
@@ -74,12 +51,13 @@ export function AccountStatusTable({ account }: AccountStatusTableProps) {
                         <TableHead className="font-bold text-right font-mono">Cuota Original</TableHead>
                         <TableHead className="font-bold text-right font-mono">Saldo Pendiente</TableHead>
                         <TableHead className="font-bold">Estado</TableHead>
-                        <TableHead className="font-bold text-right font-mono">Mora Generada</TableHead>
+                        <TableHead className="font-bold text-right font-mono">Mora</TableHead>
+                        <TableHead className="font-bold text-right font-mono">Total</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {account.installments.map((installment) => (
-                        <InstallmentRow key={installment.period} installment={installment} />
+                    {account.cuotas.map((cuota) => (
+                        <InstallmentRow key={cuota.id} installment={cuota} />
                     ))}
                 </TableBody>
             </Table>
@@ -90,13 +68,13 @@ export function AccountStatusTable({ account }: AccountStatusTableProps) {
                      <div className="flex items-center gap-3">
                         <span className="text-sm font-semibold text-muted-foreground">Deuda Original:</span>
                         <span className="text-xl font-bold font-mono text-muted-foreground">
-                            {formatCurrency(totalOriginalDebt)}
+                            {formatCurrency(account.deudaOriginalTotal)}
                         </span>
                     </div>
                     <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-muted-foreground">Deuda Pendiente:</span>
+                        <span className="text-sm font-semibold text-muted-foreground">Deuda Pendiente Total:</span>
                         <span className="text-2xl font-bold font-mono text-primary">
-                            {formatCurrency(totalPendingDebt)}
+                            {formatCurrency(account.deudaPendienteTotal)}
                         </span>
                     </div>
                 </div>
@@ -105,43 +83,46 @@ export function AccountStatusTable({ account }: AccountStatusTableProps) {
     );
 }
 
-function InstallmentRow({ installment }: { installment: AccountInstallment }) {
-    const config = statusConfig[installment.status];
+function InstallmentRow({ installment }: { installment: CuotaEstado }) {
+    const config = getStatusConfig(installment.estado);
     const StatusIcon = config.icon;
 
-    // Determine badge variant style manually if 'success' isn't supported by default UI lib
-    const badgeVariant = config.variant === 'success' ? 'default' : config.variant as any;
-    const badgeClassName = config.variant === 'success' ? 'bg-green-600 hover:bg-green-700' : '';
+    // Detectar si hay pago parcial (Cuota original > Saldo pendiente > 0)
+    const hasPartialPayment = installment.saldoPendiente > 0 && installment.saldoPendiente < installment.cuotaOriginal;
+    const montoPagadoParcial = installment.cuotaOriginal - installment.saldoPendiente;
 
     return (
         <TableRow className="hover:bg-secondary/10 transition-colors">
             <TableCell className="font-semibold">
-                Cuota {installment.period}
+                Cuota {installment.numeroCuota}
             </TableCell>
             <TableCell>
-                {new Date(installment.dueDate).toLocaleDateString('es-PE', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                })}
+                <div className="flex items-center gap-2">
+                    <CalendarClock className="h-3 w-3 text-muted-foreground" />
+                    {new Date(installment.fechaVencimiento).toLocaleDateString('es-PE', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                    })}
+                </div>
             </TableCell>
-            <TableCell className="text-right font-mono">
-                {formatCurrency(installment.originalAmount)}
+            <TableCell className="text-right font-mono text-muted-foreground">
+                {formatCurrency(installment.cuotaOriginal)}
             </TableCell>
             <TableCell className="text-right font-mono">
                 <div className="flex items-center justify-end gap-2">
-                    <span className={installment.pendingBalance > 0 ? 'text-destructive font-semibold' : 'text-muted-foreground'}>
-                        {formatCurrency(installment.pendingBalance)}
+                    <span className={installment.saldoPendiente > 0 ? 'text-foreground font-medium' : 'text-muted-foreground'}>
+                        {formatCurrency(installment.saldoPendiente)}
                     </span>
-                    {installment.hasPartialPayment && installment.pendingBalance > 0 && (
+                    {hasPartialPayment && (
                         <Tooltip>
                             <TooltipTrigger>
                                 <Info className="h-4 w-4 text-primary cursor-help" />
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs bg-popover">
-                                <p className="font-semibold mb-1">Pago parcial realizado</p>
+                                <p className="font-semibold mb-1">Pago parcial detectado</p>
                                 <p className="text-sm text-muted-foreground">
-                                    Abono de {formatCurrency(installment.partialPaymentAmount || 0)}.
+                                    Se ha amortizado {formatCurrency(montoPagadoParcial)}
                                 </p>
                             </TooltipContent>
                         </Tooltip>
@@ -150,21 +131,24 @@ function InstallmentRow({ installment }: { installment: AccountInstallment }) {
             </TableCell>
             <TableCell>
                 <Badge
-                    variant={badgeVariant}
-                    className={cn("gap-1.5", badgeClassName)}
+                    variant={config.variant as any}
+                    className={cn("gap-1.5", config.className)}
                 >
                     <StatusIcon className="h-3 w-3" />
                     {config.label}
                 </Badge>
             </TableCell>
             <TableCell className="text-right font-mono">
-                {installment.generatedInterest > 0 ? (
+                {installment.moraGenerada > 0 ? (
                     <span className="text-destructive font-semibold">
-                        +{formatCurrency(installment.generatedInterest)}
+                        +{formatCurrency(installment.moraGenerada)}
                     </span>
                 ) : (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-muted-foreground">-</span>
                 )}
+            </TableCell>
+             <TableCell className="text-right font-mono font-bold">
+                {formatCurrency(installment.totalAPagar)}
             </TableCell>
         </TableRow>
     );

@@ -1,19 +1,9 @@
 import { useState } from 'react';
 import {
-    CreditCard,
-    Banknote,
-    Smartphone,
-    Printer,
-    Mail,
-    CheckCircle2,
-    RotateCcw,
-    Receipt
+    Banknote, Smartphone, Printer, Mail, CheckCircle2, RotateCcw, Receipt, CreditCard
 } from 'lucide-react';
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
+    Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,111 +11,87 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { ClientAccount, PaymentMethod } from '@/types/operations';
-import { formatCurrency, calculateRounding } from '@/lib/operationsData';
+import { ClientAccount, PaymentMethod, PaymentResponse } from '@/types/operations';
+import { formatCurrency, calculateRounding} from '@/lib/operationsData';
 import { cn } from '@/lib/utils';
+import { operationsService } from '@/api/operationsService';
 
 interface TransactionModalProps {
     open: boolean;
     onClose: () => void;
     account: ClientAccount;
+    onSuccess: () => void;
 }
 
 type Step = 'input' | 'success';
 
-export function TransactionModal({ open, onClose, account }: TransactionModalProps) {
+export function TransactionModal({ open, onClose, account, onSuccess }: TransactionModalProps) {
     const [step, setStep] = useState<Step>('input');
     const [amount, setAmount] = useState('');
-    const [method, setMethod] = useState<PaymentMethod>('cash');
+    const [method, setMethod] = useState<PaymentMethod>('EFECTIVO');
     const [processing, setProcessing] = useState(false);
-    const [transactionId, setTransactionId] = useState('');
+    const [paymentResult, setPaymentResult] = useState<PaymentResponse | null>(null);
 
-    // Calculate total pending debt from installments
-    const totalPendingDebt = account.installments.reduce((sum, inst) => sum + inst.pendingBalance, 0);
-
+    const totalPendingDebt = account.deudaPendienteTotal;
     const parsedAmount = parseFloat(amount) || 0;
+    
+    // Cálculo de redondeo (visual)
     const { adjustment, rounded } = calculateRounding(parsedAmount);
-    const isCash = method === 'cash';
+    const isCash = method === 'EFECTIVO';
 
-    // Logic to determine what the payment covers
-    const getPaymentCoverage = (payAmount: number) => {
-        let remaining = payAmount;
-        let covered = 0;
-        let partial = false;
-        
-        // This is a simplified simulation for visualization. 
-        // Real logic would be handled by backend or a more complex reducer
-        const affectedInstallments = account.installments.filter(i => i.pendingBalance > 0).map(inst => {
-            if (remaining <= 0) return null;
-            
-            const paying = Math.min(remaining, inst.pendingBalance);
-            remaining -= paying;
-            return {
-                period: inst.period,
-                amount: paying,
-                fullyPaid: paying >= inst.pendingBalance
-            };
-        }).filter(Boolean);
-
-        return affectedInstallments;
-    };
-
-    const coverage = getPaymentCoverage(parsedAmount);
-
+    // Sugerencias de montos
     const suggestedAmounts = [
         { label: 'Deuda Total', value: totalPendingDebt },
     ].filter(s => s.value > 0);
     
-    // Add current month installment if available and unpaid
-    const currentInstallment = account.installments.find(i => i.status === 'current' || i.status === 'overdue');
-    if (currentInstallment && currentInstallment.pendingBalance > 0) {
-        suggestedAmounts.unshift({ label: 'Cuota Actual', value: currentInstallment.pendingBalance });
+    // Buscar la cuota más antigua pendiente para sugerir su pago
+    // Usamos 'totalAPagar' que viene calculado del backend (capital + mora)
+    const currentInstallment = account.cuotas.find(c => c.totalAPagar > 0);
+    if (currentInstallment) {
+        suggestedAmounts.unshift({ label: 'Cuota Actual', value: currentInstallment.totalAPagar });
     }
 
-    const handleProcess = () => {
+    const handleProcess = async () => {
         if (parsedAmount <= 0) {
             toast.error('Ingrese un monto válido');
             return;
         }
-
-        if (parsedAmount > totalPendingDebt + 0.1) { // Small buffer for float comparison
-            toast.error('El monto no puede exceder la deuda pendiente total');
+        if (parsedAmount > totalPendingDebt + 0.5) { 
+            toast.error('El monto excede la deuda total');
             return;
         }
 
         setProcessing(true);
-        setTimeout(() => {
-            const txId = `TX-${Date.now().toString(36).toUpperCase()}`;
-            setTransactionId(txId);
+        try {
+            const response = await operationsService.processPayment({
+                prestamoId: account.prestamoId,
+                monto: parsedAmount,
+                metodoPago: method
+            });
+
+            setPaymentResult(response);
             setStep('success');
+            toast.success('Pago registrado correctamente');
+            onSuccess(); 
+        } catch (error) {
+            console.error(error);
+            toast.error('Error procesando pago', { description: 'Verifique su conexión.' });
+        } finally {
             setProcessing(false);
-            toast.success('Transacción procesada correctamente');
-        }, 1500);
-    };
-
-    const handlePrint = () => {
-        toast.success('Generando voucher para impresión...');
-        window.print();
-    };
-
-    const handleEmail = () => {
-        toast.success('Voucher enviado al correo del cliente');
+        }
     };
 
     const handleNewOperation = () => {
         setStep('input');
         setAmount('');
-        setMethod('cash');
-        setTransactionId('');
+        setMethod('EFECTIVO');
+        setPaymentResult(null);
         onClose();
     };
 
     const handleClose = () => {
-        if (step === 'success') {
-            handleNewOperation();
-        } else {
-            onClose();
-        }
+        if (step === 'success') handleNewOperation();
+        else onClose();
     };
 
     return (
@@ -139,46 +105,26 @@ export function TransactionModal({ open, onClose, account }: TransactionModalPro
 
                 {step === 'input' ? (
                     <div className="space-y-6">
-                        {/* Client Info */}
                         <div className="p-4 rounded-xl bg-secondary/30 border border-border/50">
-                            <p className="font-semibold text-lg">{account.clientName}</p>
-                            <p className="text-sm text-muted-foreground">
-                                {account.clientRUC ? `RUC: ${account.clientRUC}` : `DNI: ${account.clientDNI}`}
-                            </p>
+                            <p className="font-semibold text-lg">{account.clienteNombre}</p>
+                            <p className="text-sm text-muted-foreground">{account.documento}</p>
                             <p className="text-sm font-mono mt-2">
-                                Deuda Pendiente: <span className="font-bold text-destructive">{formatCurrency(totalPendingDebt)}</span>
+                                Deuda Total: <span className="font-bold text-destructive">{formatCurrency(totalPendingDebt)}</span>
                             </p>
                         </div>
 
-                        {/* Payment Method Tabs */}
                         <Tabs value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
                             <TabsList className="grid w-full grid-cols-4 h-12">
-                                <TabsTrigger value="cash" className="gap-2">
-                                    <Banknote className="h-4 w-4" />
-                                    <span className="hidden sm:inline">Efectivo</span>
-                                </TabsTrigger>
-                                <TabsTrigger value="yape" className="gap-2">
-                                    <Smartphone className="h-4 w-4" />
-                                    <span className="hidden sm:inline">Yape</span>
-                                </TabsTrigger>
-                                <TabsTrigger value="plin" className="gap-2">
-                                    <Smartphone className="h-4 w-4" />
-                                    <span className="hidden sm:inline">Plin</span>
-                                </TabsTrigger>
-                                <TabsTrigger value="card" className="gap-2">
-                                    <CreditCard className="h-4 w-4" />
-                                    <span className="hidden sm:inline">Tarjeta</span>
-                                </TabsTrigger>
+                                <TabsTrigger value="EFECTIVO"><Banknote className="h-4 w-4 mr-2"/>Efectivo</TabsTrigger>
+                                <TabsTrigger value="YAPE"><Smartphone className="h-4 w-4 mr-2"/>Yape</TabsTrigger>
+                                <TabsTrigger value="PLIN"><Smartphone className="h-4 w-4 mr-2"/>Plin</TabsTrigger>
+                                <TabsTrigger value="TARJETA"><CreditCard className="h-4 w-4 mr-2"/>Tarjeta</TabsTrigger>
                             </TabsList>
 
                             <TabsContent value={method} className="mt-4 space-y-4">
-                                {/* Amount Input */}
                                 <div className="space-y-2">
-                                    <Label htmlFor="amount" className="text-base font-semibold">
-                                        Monto a Pagar
-                                    </Label>
+                                    <Label className="text-base font-semibold">Monto a Pagar</Label>
                                     <Input
-                                        id="amount"
                                         type="number"
                                         placeholder="0.00"
                                         value={amount}
@@ -186,79 +132,46 @@ export function TransactionModal({ open, onClose, account }: TransactionModalPro
                                         className="h-14 text-2xl font-mono font-bold text-center"
                                         step="0.01"
                                         min="0"
-                                        max={totalPendingDebt}
                                     />
-                                    {parsedAmount > totalPendingDebt && (
-                                        <p className="text-xs text-destructive text-center font-semibold">
-                                            El monto excede la deuda pendiente ({formatCurrency(totalPendingDebt)})
-                                        </p>
-                                    )}
                                 </div>
 
-                                {/* Suggested Amounts */}
                                 <div className="flex flex-wrap gap-2">
-                                    {suggestedAmounts.map((suggestion) => (
+                                    {suggestedAmounts.map((s) => (
                                         <Badge
-                                            key={suggestion.label}
+                                            key={s.label}
                                             variant="outline"
-                                            className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors py-2 px-3"
-                                            onClick={() => setAmount(suggestion.value.toFixed(2))}
+                                            className="cursor-pointer hover:bg-primary hover:text-primary-foreground py-2 px-3"
+                                            onClick={() => setAmount(s.value.toFixed(2))}
                                         >
-                                            {suggestion.label}: {formatCurrency(suggestion.value)}
+                                            {s.label}: {formatCurrency(s.value)}
                                         </Badge>
                                     ))}
                                 </div>
 
-                                 {/* Coverage Preview */}
-                                 {coverage && coverage.length > 0 && (
-                                     <div className="text-xs text-muted-foreground bg-secondary/20 p-2 rounded-lg space-y-1">
-                                         <p className="font-semibold mb-1">Este pago cubrirá:</p>
-                                         {coverage.map((c: any, i) => (
-                                             <div key={i} className="flex justify-between">
-                                                 <span>Cuota {c.period} ({c.fullyPaid ? 'Completa' : 'Parcial'})</span>
-                                                 <span className="font-mono">{formatCurrency(c.amount)}</span>
-                                             </div>
-                                         ))}
-                                     </div>
-                                 )}
-
-                                {/* Rounding Ticket (Cash Only) */}
-                                {isCash && parsedAmount > 0 && parsedAmount <= totalPendingDebt && (
-                                    <div className="p-4 rounded-xl bg-secondary/50 border-2 border-dashed border-border space-y-3">
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            <Receipt className="h-4 w-4" />
-                                            <span className="font-semibold">Ticket de Pago</span>
+                                {isCash && parsedAmount > 0 && (
+                                    <div className="p-4 rounded-xl bg-secondary/50 border-2 border-dashed border-border space-y-3 font-mono text-sm">
+                                        <div className="flex items-center gap-2 text-muted-foreground font-sans text-sm font-semibold">
+                                            <Receipt className="h-4 w-4"/> Simulación de Cobro
                                         </div>
-
-                                        <div className="space-y-2 font-mono text-sm">
-                                            <div className="flex justify-between">
-                                                <span>Subtotal:</span>
-                                                <span>{formatCurrency(parsedAmount)}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span>Ajuste por Redondeo:</span>
-                                                <span className={cn(
-                                                    'font-semibold',
-                                                    adjustment < 0 ? 'text-destructive' : adjustment > 0 ? 'text-green-600' : ''
-                                                )}>
-                                                    {adjustment >= 0 ? '+' : ''}{formatCurrency(adjustment)}
-                                                </span>
-                                            </div>
-                                            <div className="border-t border-border pt-2 flex justify-between">
-                                                <span className="font-semibold">Total a Cobrar:</span>
-                                                <span className="text-xl font-bold text-primary">
-                                                    {formatCurrency(rounded)}
-                                                </span>
-                                            </div>
+                                        <div className="flex justify-between">
+                                            <span>Subtotal:</span><span>{formatCurrency(parsedAmount)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>Redondeo:</span>
+                                            <span className={adjustment < 0 ? 'text-destructive' : 'text-green-600'}>
+                                                {adjustment >= 0 ? '+' : ''}{formatCurrency(adjustment)}
+                                            </span>
+                                        </div>
+                                        <div className="border-t pt-2 flex justify-between font-bold text-lg text-primary">
+                                            <span>A Cobrar:</span><span>{formatCurrency(rounded)}</span>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Process Button */}
                                 <Button
                                     onClick={handleProcess}
-                                    disabled={processing || parsedAmount <= 0 || parsedAmount > totalPendingDebt + 0.1}
-                                    className="w-full h-14 text-lg font-bold bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-all"
+                                    disabled={processing || parsedAmount <= 0}
+                                    className="w-full h-14 text-lg font-bold bg-gradient-to-r from-primary to-accent"
                                 >
                                     {processing ? 'Procesando...' : 'Confirmar Pago'}
                                 </Button>
@@ -266,61 +179,46 @@ export function TransactionModal({ open, onClose, account }: TransactionModalPro
                         </Tabs>
                     </div>
                 ) : (
-                    /* Success Step */
                     <div className="space-y-6 py-4">
                         <div className="flex flex-col items-center text-center">
                             <div className="p-4 rounded-full bg-green-100 mb-4">
                                 <CheckCircle2 className="h-16 w-16 text-green-600" />
                             </div>
                             <h3 className="text-2xl font-bold text-green-600">¡Pago Exitoso!</h3>
-                            <p className="text-muted-foreground mt-2">
-                                Transacción: <span className="font-mono font-bold">{transactionId}</span>
-                            </p>
                         </div>
 
-                        <div className="p-4 rounded-xl bg-secondary/30 border border-border/50 space-y-2 font-mono text-sm">
-                            <div className="flex justify-between">
-                                <span>Cliente:</span>
-                                <span className="font-semibold">{account.clientName}</span>
+                        {paymentResult && (
+                            <div className="p-4 rounded-xl bg-secondary/30 border border-border/50 space-y-2 font-mono text-sm">
+                                <div className="flex justify-between">
+                                    <span>Monto Aplicado:</span>
+                                    <span className="font-bold text-primary">{formatCurrency(paymentResult.montoAplicado)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span>Deuda Restante:</span>
+                                    <span className="font-bold text-destructive">{formatCurrency(paymentResult.deudaRestante)}</span>
+                                </div>
+                                {paymentResult.detallesCobertura.length > 0 && (
+                                    <div className="mt-4 pt-4 border-t border-border/50">
+                                        <p className="font-sans font-semibold mb-2 text-xs text-muted-foreground">DETALLE:</p>
+                                        <ul className="list-disc list-inside space-y-1 text-xs text-muted-foreground">
+                                            {paymentResult.detallesCobertura.map((line, idx) => (
+                                                <li key={idx}>{line}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
                             </div>
-                            <div className="flex justify-between">
-                                <span>Monto Pagado:</span>
-                                <span className="font-bold text-primary">
-                                    {formatCurrency(isCash ? rounded : parsedAmount)}
-                                </span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span>Método:</span>
-                                <Badge variant="secondary" className="capitalize">{method}</Badge>
-                            </div>
-                        </div>
+                        )}
 
                         <div className="grid grid-cols-1 gap-3">
-                            <Button
-                                onClick={handlePrint}
-                                size="lg"
-                                className="h-14 gap-3 text-base font-semibold"
-                                variant="outline"
-                            >
-                                <Printer className="h-5 w-5" />
-                                Imprimir Voucher
+                            <Button onClick={() => window.print()} variant="outline" size="lg" className="gap-2">
+                                <Printer className="h-5 w-5"/> Imprimir Voucher
                             </Button>
-                            <Button
-                                onClick={handleEmail}
-                                size="lg"
-                                className="h-14 gap-3 text-base font-semibold"
-                                variant="outline"
-                            >
-                                <Mail className="h-5 w-5" />
-                                Enviar por Correo
+                            <Button onClick={() => toast.success('Enviado')} variant="outline" size="lg" className="gap-2">
+                                <Mail className="h-5 w-5"/> Enviar por Correo
                             </Button>
-                            <Button
-                                onClick={handleNewOperation}
-                                size="lg"
-                                className="h-14 gap-3 text-base font-semibold bg-gradient-to-r from-primary to-accent text-white"
-                            >
-                                <RotateCcw className="h-5 w-5" />
-                                Nueva Operación
+                            <Button onClick={handleNewOperation} size="lg" className="bg-gradient-to-r from-primary to-accent text-white gap-2">
+                                <RotateCcw className="h-5 w-5"/> Nueva Operación
                             </Button>
                         </div>
                     </div>

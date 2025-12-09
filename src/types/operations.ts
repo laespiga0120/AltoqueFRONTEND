@@ -1,59 +1,63 @@
-export type PaymentStatus = 'pending' | 'current' | 'stopped_interest' | 'overdue' | 'paid';
-export type PaymentMethod = 'cash' | 'yape' | 'plin' | 'card';
-export type TransactionType = 'payment' | 'opening' | 'closing' | 'adjustment';
+// --- DTOs del Backend (Coinciden con Java) ---
+
+export type PaymentMethod = 'EFECTIVO' | 'YAPE' | 'PLIN' | 'TARJETA';
 
 export interface AccountInstallment {
-    period: number;
-    dueDate: string;
-    originalAmount: number;
-    pendingBalance: number;
-    status: PaymentStatus;
-    generatedInterest: number;
-    hasPartialPayment: boolean;
-    partialPaymentAmount?: number;
+  id: number;
+  numeroCuota: number;
+  fechaVencimiento: string; // ISO date 'YYYY-MM-DD'
+  cuotaOriginal: number;
+  saldoPendiente: number;
+  moraGenerada: number;
+  estado: string;
+  totalAPagar: number;
 }
 
 export interface ClientAccount {
-    clientDNI: string;
-    clientRUC?: string;
-    clientName: string;
-    loanId: string;
-    totalDebt: number;
-    currentMonthPayment: number;
-    previousPendingBalance: number;
-    installments: AccountInstallment[];
+  prestamoId: number;
+  clienteNombre: string;
+  documento: string; // DNI o RUC
+  deudaOriginalTotal: number;
+  deudaPendienteTotal: number;
+  cuotas: AccountInstallment[];
 }
 
+export interface PaymentRequest {
+  prestamoId: number;
+  monto: number;
+  metodoPago: PaymentMethod;
+}
+
+export interface PaymentResponse {
+  mensaje: string;
+  montoAplicado: number;
+  deudaRestante: number;
+  detallesCobertura: string[];
+}
+
+// --- Tipos Locales / Caja ---
+
 export interface Transaction {
-    id: string;
-    timestamp: string;
-    clientDNI: string;
-    clientName: string;
-    type: TransactionType;
-    method: PaymentMethod;
-    systemAmount: number;
-    roundingAdjustment: number;
-    realAmount: number;
-    installmentsPaid: number[];
-    operatorId?: string;
+  id: string;
+  timestamp: string;
+  clientDNI: string;
+  clientName: string;
+  type: 'payment' | 'opening' | 'withdrawal';
+  method: string;
+  systemAmount: number;
+  roundingAdjustment: number;
+  realAmount: number;
+  installmentsPaid: number[];
+  operatorId: string;
 }
 
 export interface CashRegisterSummary {
-    openingBalance: number;
-    cashEntries: number;
-    roundingAdjustment: number;
-    digitalEntries: number;
-    theoreticalTotal: number;
-    transactions: Transaction[];
-    date: string;
-    status: 'open' | 'closed';
-}
-
-export interface ClosureResult {
-    countedCash: number;
-    theoreticalCash: number;
-    difference: number;
-    isBalanced: boolean;
-    closedAt: string;
-    closedBy: string;
+  openingBalance: number;
+  cashEntries: number;
+  roundingAdjustment: number;
+  digitalEntries: number;
+  theoreticalTotal: number;
+  transactions: Transaction[];
+  date: string;
+  status: 'open' | 'closed';
 }

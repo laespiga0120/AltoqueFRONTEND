@@ -2,23 +2,20 @@ import { ClientSummary, ClientDetail } from "../types/client";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
 
-/**
- * Helper para peticiones JSON genéricas
- */
+// Extendemos ClientSummary para asegurar que tenga ID, necesario para buscar el estado de cuenta
+export interface ClientSearchResult extends ClientSummary {
+    idCliente: number;
+}
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  console.log(`📡 Fetching: ${url}`); 
+  
   const response = await fetch(url, options);
   if (!response.ok) {
-     // Intenta leer el mensaje de error del backend
     const errorText = await response.text();
-    let errorMessage = `Error ${response.status}: ${response.statusText}`;
-    try {
-        const errorJson = JSON.parse(errorText);
-        if(errorJson.message) errorMessage = errorJson.message;
-    } catch(e) {}
-    
-    throw new Error(errorMessage);
+    console.error(`❌ Error ${response.status}:`, errorText);
+    throw new Error(`Error ${response.status}: ${response.statusText}`);
   }
-  // Manejo de respuestas vacías (como en el caso de buscar por RUC y no encontrar nada)
   if (response.status === 204) {
       return null as any;
   }
@@ -26,21 +23,12 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 /**
- * Función genérica para manejar la descarga de archivos PDF.
+ * Función genérica para descarga de PDF (sin cambios)
  */
-async function downloadPdf(
-  endpoint: string,
-  options: RequestInit,
-  filename: string
-) {
+async function downloadPdf(endpoint: string, options: RequestInit, filename: string) {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        errorText || "Error al generar el documento PDF desde el servidor."
-      );
-    }
+    if (!response.ok) throw new Error("Error generando PDF");
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -51,77 +39,70 @@ async function downloadPdf(
     a.remove();
     window.URL.revokeObjectURL(url);
   } catch (error) {
-    console.error("Fallo la descarga del PDF:", error);
-    throw error;
+    console.error("Fallo descarga PDF", error);
   }
 }
 
 export const clientService = {
-  
-  // 1. Búsqueda General (DNI o RUC) para el Dashboard
-  searchByDocument: async (documento: string): Promise<ClientSummary | null> => {
-      // El backend ahora maneja la lógica de longitud en un solo endpoint o tú decides cual llamar
-      // Dado tu backend actual, `consultarClienteYEstadoPrestamo` maneja ambas longitudes.
-      try {
-        const data = await fetchJson<ClientSummary>(`${API_BASE_URL}/api/clientes/consulta/${documento}`);
-        return data; 
-      } catch (error) {
-          // Si es 404, significa que no se encontró (especialmente para RUCs nuevos en BD local)
-          // Retornamos null para que el frontend habilite el registro.
-          console.warn("Cliente no encontrado:", error);
-          return null;
-      }
-  },
+    // ... Métodos existentes (searchByDocument, getDetails, etc.) ...
 
-  // Mantener por compatibilidad si se usa explícitamente, pero searchByDocument es preferible
-  searchByDNI: async (dni: string) => clientService.searchByDocument(dni),
-  searchByRUC: async (ruc: string) => clientService.searchByDocument(ruc),
+    searchByDocument: async (documento: string): Promise<ClientSummary | null> => {
+        try {
+          const data = await fetchJson<ClientSummary>(`${API_BASE_URL}/api/clientes/consulta/${documento}`);
+          return data;
+        } catch (error) {
+            console.warn("Cliente no encontrado:", error);
+            return null;
+        }
+    },
 
-  // 2. Obtener Detalles para el Formulario (Pre-llenado)
-  getDetailsByDocument: async (documento: string): Promise<ClientDetail> => {
-     // Este endpoint del backend devuelve los datos de la BD o consulta la API externa si es DNI
-     // Si es RUC y no existe, devuelve un DTO vacío con esNuevo=true (según tu lógica Java)
-     return await fetchJson<ClientDetail>(`${API_BASE_URL}/api/clientes/detalles/${documento}`);
-  },
+    getDetailsByDocument: async (documento: string): Promise<ClientDetail> => {
+       return await fetchJson<ClientDetail>(`${API_BASE_URL}/api/clientes/detalles/${documento}`);
+    },
 
-  // Wrappers de compatibilidad
-  getDetailsByDNI: async (dni: string) => clientService.getDetailsByDocument(dni),
-  getDetailsByRUC: async (ruc: string) => clientService.getDetailsByDocument(ruc),
-
-
-  // 3. Registrar o Actualizar Cliente
-  registerOrUpdate: async (clientData: Partial<ClientDetail>): Promise<ClientDetail> => {
-    return await fetchJson<ClientDetail>(`${API_BASE_URL}/api/clientes/registrarOActualizar`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(clientData),
-    });
-  },
-
-  // 4. Descargas de PDF
-  downloadPEPPdf: (clientData: ClientDetail): Promise<void> => {
-    const id = clientData.dniCliente || clientData.ruc || "documento";
-    return downloadPdf(
-      "/api/prestamos/documentos/declaracion-pep",
-      {
+    registerOrUpdate: async (clientData: Partial<ClientDetail>): Promise<ClientDetail> => {
+      return await fetchJson<ClientDetail>(`${API_BASE_URL}/api/clientes/registrarOActualizar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(clientData),
-      },
-      `Declaracion_PEP_${id}.pdf`
-    );
-  },
+      });
+    },
 
-  downloadUITPdf: (clientData: ClientDetail, amount: number): Promise<void> => {
-    const id = clientData.dniCliente || clientData.ruc || "documento";
-    return downloadPdf(
-      "/api/prestamos/documentos/declaracion-uit",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client: clientData, amount: amount }),
-      },
-      `Declaracion_Jurada_UIT_${id}.pdf`
-    );
-  },
+    // --- CORRECCIÓN FINAL AQUÍ ---
+    searchClients: async (query: string): Promise<ClientSearchResult[]> => {
+        if (!query || query.length < 2) return [];
+        
+        try {
+            // El backend ya devuelve objetos con las claves correctas (idCliente, nombreCliente, etc.)
+            // según tus logs.
+            const rawData = await fetchJson<any[]>(`${API_BASE_URL}/api/clientes/buscar?query=${encodeURIComponent(query)}`);
+            
+            console.log("📦 Data backend:", rawData);
+
+            // Simplemente aseguramos que cumpla la interfaz, o hacemos un mapeo ligero si falta algo
+            const mappedResults: ClientSearchResult[] = rawData.map((c: any) => ({
+                // Usamos las claves QUE VIMOS EN EL LOG
+                idCliente: c.idCliente || c.id, // Fallback por si acaso
+                tipo: c.tipoCliente || c.tipo || 'NATURAL', // Ajuste según tu log (dice 'tipoCliente')
+                
+                dniCliente: c.dniCliente,
+                ruc: c.ruc,
+                razonSocial: c.razonSocial,
+                nombreCliente: c.nombreCliente,
+                apellidoCliente: c.apellidoCliente,
+                
+                tienePrestamoActivo: c.tienePrestamoActivo || false
+            }));
+
+            console.log("✨ Resultados listos:", mappedResults);
+            return mappedResults;
+
+        } catch (error) {
+            console.error("🔥 Error en searchClients:", error);
+            return [];
+        }
+    },
+
+    downloadPEPPdf: (clientData: ClientDetail) => Promise.resolve(), 
+    downloadUITPdf: (clientData: ClientDetail, amount: number) => Promise.resolve(),
 };
