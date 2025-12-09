@@ -6,7 +6,8 @@ import {
     CheckCircle2,
     RotateCcw,
     Receipt,
-    Globe
+    Globe,
+    Download
 } from 'lucide-react';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -22,6 +23,8 @@ import { formatCurrency, calculateRounding} from '@/lib/operationsData';
 import { operationsService } from '@/api/operationsService';
 // Importamos el componente que acabamos de crear
 import { MercadoPagoButton } from '@/components/MercadoPagoButton';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface TransactionModalProps {
     open: boolean;
@@ -89,6 +92,63 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
         setTab('EFECTIVO');
         setPaymentResult(null);
         onClose();
+    };
+
+    const generatePDF = () => {
+        const doc = new jsPDF();
+        
+        // Título y Cabecera
+        doc.setFontSize(16);
+        doc.text('COMPROBANTE DE PAGO', 105, 20, { align: 'center' });
+        
+        doc.setFontSize(10);
+        doc.text(`Fecha: ${new Date().toLocaleString()}`, 105, 30, { align: 'center' });
+        doc.text('La Espiga - Préstamos', 105, 36, { align: 'center' });
+
+        // Detalles del Cliente
+        doc.setFontSize(11);
+        doc.text('Detalles del Cliente:', 14, 50);
+        
+        doc.setFontSize(10);
+        doc.text(`Cliente: ${account.clienteNombre}`, 14, 58);
+        doc.text(`Documento: ${account.documento}`, 14, 64);
+        
+        // Tabla de detalles del pago
+        const tableData = [
+            ['Concepto', 'Monto'],
+            ['Monto Recibido', formatCurrency(parsedAmount)],
+            ['Ajuste Redondeo', formatCurrency(adjustment)],
+            ['Total Cobrado', formatCurrency(rounded)],
+        ];
+        
+        if (paymentResult?.deudaRestante !== undefined) {
+             tableData.push(['Deuda Restante', formatCurrency(paymentResult.deudaRestante)]);
+        }
+
+        autoTable(doc, {
+            startY: 75,
+            head: [['Descripción', 'Valor']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [66, 66, 66] },
+        });
+
+        // Pie de página
+        const finalY = (doc as any).lastAutoTable.finalY + 20;
+        doc.text('Gracias por su pago', 105, finalY, { align: 'center' });
+        
+        return doc;
+    };
+
+    const handlePrint = () => {
+        const doc = generatePDF();
+        doc.autoPrint();
+        window.open(doc.output('bloburl'), '_blank');
+    };
+
+    const handleDownload = () => {
+        const doc = generatePDF();
+        doc.save(`voucher_${account.documento}_${Date.now()}.pdf`);
     };
 
     const handleClose = () => {
@@ -212,6 +272,15 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                             <p className="text-muted-foreground">Operación completada</p>
                         </div>
                         {/* Detalles del pago exitoso ... */}
+                        <div className="grid grid-cols-2 gap-3">
+                             <Button onClick={handlePrint} variant="outline" className="w-full">
+                                <Printer className="h-4 w-4 mr-2"/> Imprimir
+                            </Button>
+                            <Button onClick={handleDownload} variant="outline" className="w-full">
+                                <Download className="h-4 w-4 mr-2"/> Descargar
+                            </Button>
+                        </div>
+
                         <div className="grid grid-cols-1 gap-3">
                             <Button onClick={handleNewOperation} size="lg" className="w-full">
                                 <RotateCcw className="h-5 w-5 mr-2"/> Nueva Operación
