@@ -43,6 +43,7 @@ export function calculateLoanSchedule(
       installmentNumber: i,
       dueDate: dueDate.toISOString().split("T")[0],
       amount: Math.round(paymentForMonth * 100) / 100,
+      state: "PENDIENTE",
     });
   }
 

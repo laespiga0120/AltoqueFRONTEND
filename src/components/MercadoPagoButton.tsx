@@ -32,7 +32,7 @@ export const MercadoPagoButton = ({ loanId, amount, clientName, disabled }: Merc
   const handleGeneratePreference = async () => {
   try {
     setLoading(true);
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+    const API_URL = import.meta.env.VITE_API_URL || 'https://al-toque-d0b27cb5aec4.herokuapp.com/api';
     let token = authService.getToken();
 
     if (!token) {

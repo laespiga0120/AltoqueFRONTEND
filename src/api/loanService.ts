@@ -1,7 +1,7 @@
 import { Loan } from "../types/loan";
 
 // Definición segura de la URL Base
-const API_BASE_URL = "http://localhost:8080";
+const API_BASE_URL = "https://al-toque-d0b27cb5aec4.herokuapp.com";
 
 // Interfaz para el mapeo del cronograma desde el backend
 interface CuotaDto {
