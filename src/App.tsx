@@ -77,7 +77,7 @@ const App = () => (
           
           {/* Rutas de retorno de Mercado Pago */}
           <Route
-            path="/pagos/exito"
+            path="/payment/success"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -87,7 +87,7 @@ const App = () => (
             }
           />
           <Route
-            path="/pagos/fallo"
+            path="/payment/failure"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -97,7 +97,7 @@ const App = () => (
             }
           />
           <Route
-            path="/pagos/pendiente"
+            path="/payment/pending"
             element={
               <ProtectedRoute>
                 <Layout>

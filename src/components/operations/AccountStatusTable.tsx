@@ -14,19 +14,18 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { AccountStatus, CuotaEstado } from '@/types/operations';
+import { ClientAccount, AccountInstallment } from '@/types/operations';
 import { formatCurrency } from '@/lib/operationsData';
 
 interface AccountStatusTableProps {
-    account: AccountStatus;
+    account: ClientAccount;
 }
 
-// Mapeo de estados del Backend a configuración visual
 const getStatusConfig = (status: string) => {
-    const normalized = status.toLowerCase();
-    if (normalized.includes('pagado')) return { label: 'Pagado', variant: 'success', icon: CheckCircle, className: 'bg-green-600 hover:bg-green-700' };
-    if (normalized.includes('mora activa')) return { label: status, variant: 'destructive', icon: AlertTriangle, className: '' };
-    if (normalized.includes('adelanto')) return { label: 'Adelanto', variant: 'secondary', icon: CheckCircle, className: 'bg-blue-500/15 text-blue-700 hover:bg-blue-500/25' };
+    const s = status.toLowerCase();
+    if (s.includes('pagado')) return { label: 'Pagado', variant: 'success', icon: CheckCircle, className: 'bg-green-600 hover:bg-green-700' };
+    if (s.includes('mora')) return { label: status, variant: 'destructive', icon: AlertTriangle, className: '' };
+    if (s.includes('adelanto')) return { label: 'Adelanto', variant: 'secondary', icon: CheckCircle, className: 'bg-blue-500/15 text-blue-700' };
     return { label: 'Pendiente', variant: 'outline', icon: Clock, className: '' };
 };
 
@@ -36,7 +35,7 @@ export function AccountStatusTable({ account }: AccountStatusTableProps) {
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <CheckCircle className="h-12 w-12 mb-4 text-primary" />
                 <p className="text-lg font-semibold">Sin deuda pendiente</p>
-                <p className="text-sm">Este cliente no tiene cuotas registradas.</p>
+                <p className="text-sm">No se encontraron cuotas activas para este préstamo.</p>
             </div>
         );
     }
@@ -52,7 +51,7 @@ export function AccountStatusTable({ account }: AccountStatusTableProps) {
                         <TableHead className="font-bold text-right font-mono">Saldo Pendiente</TableHead>
                         <TableHead className="font-bold">Estado</TableHead>
                         <TableHead className="font-bold text-right font-mono">Mora</TableHead>
-                        <TableHead className="font-bold text-right font-mono">Total</TableHead>
+                        <TableHead className="font-bold text-right font-mono">Total a Pagar</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -62,7 +61,6 @@ export function AccountStatusTable({ account }: AccountStatusTableProps) {
                 </TableBody>
             </Table>
 
-            {/* Summary Footer */}
             <div className="p-4 bg-secondary/20 border-t border-border/50">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-8">
                      <div className="flex items-center gap-3">
@@ -72,7 +70,7 @@ export function AccountStatusTable({ account }: AccountStatusTableProps) {
                         </span>
                     </div>
                     <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-muted-foreground">Deuda Pendiente Total:</span>
+                        <span className="text-sm font-semibold text-muted-foreground">Deuda Pendiente:</span>
                         <span className="text-2xl font-bold font-mono text-primary">
                             {formatCurrency(account.deudaPendienteTotal)}
                         </span>
@@ -83,13 +81,12 @@ export function AccountStatusTable({ account }: AccountStatusTableProps) {
     );
 }
 
-function InstallmentRow({ installment }: { installment: CuotaEstado }) {
+function InstallmentRow({ installment }: { installment: AccountInstallment }) {
     const config = getStatusConfig(installment.estado);
     const StatusIcon = config.icon;
 
-    // Detectar si hay pago parcial (Cuota original > Saldo pendiente > 0)
-    const hasPartialPayment = installment.saldoPendiente > 0 && installment.saldoPendiente < installment.cuotaOriginal;
-    const montoPagadoParcial = installment.cuotaOriginal - installment.saldoPendiente;
+    const isPartial = installment.saldoPendiente > 0 && installment.saldoPendiente < installment.cuotaOriginal;
+    const pagado = installment.cuotaOriginal - installment.saldoPendiente;
 
     return (
         <TableRow className="hover:bg-secondary/10 transition-colors">
@@ -100,9 +97,7 @@ function InstallmentRow({ installment }: { installment: CuotaEstado }) {
                 <div className="flex items-center gap-2">
                     <CalendarClock className="h-3 w-3 text-muted-foreground" />
                     {new Date(installment.fechaVencimiento).toLocaleDateString('es-PE', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
+                        day: '2-digit', month: 'short', year: 'numeric'
                     })}
                 </div>
             </TableCell>
@@ -114,15 +109,15 @@ function InstallmentRow({ installment }: { installment: CuotaEstado }) {
                     <span className={installment.saldoPendiente > 0 ? 'text-foreground font-medium' : 'text-muted-foreground'}>
                         {formatCurrency(installment.saldoPendiente)}
                     </span>
-                    {hasPartialPayment && (
+                    {isPartial && (
                         <Tooltip>
                             <TooltipTrigger>
                                 <Info className="h-4 w-4 text-primary cursor-help" />
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs bg-popover">
-                                <p className="font-semibold mb-1">Pago parcial detectado</p>
+                                <p className="font-semibold mb-1">Pago Parcial</p>
                                 <p className="text-sm text-muted-foreground">
-                                    Se ha amortizado {formatCurrency(montoPagadoParcial)}
+                                    Abonado: {formatCurrency(pagado)}
                                 </p>
                             </TooltipContent>
                         </Tooltip>
@@ -130,24 +125,19 @@ function InstallmentRow({ installment }: { installment: CuotaEstado }) {
                 </div>
             </TableCell>
             <TableCell>
-                <Badge
-                    variant={config.variant as any}
-                    className={cn("gap-1.5", config.className)}
-                >
+                <Badge variant={config.variant as any} className={cn("gap-1.5", config.className)}>
                     <StatusIcon className="h-3 w-3" />
                     {config.label}
                 </Badge>
             </TableCell>
             <TableCell className="text-right font-mono">
                 {installment.moraGenerada > 0 ? (
-                    <span className="text-destructive font-semibold">
-                        +{formatCurrency(installment.moraGenerada)}
-                    </span>
+                    <span className="text-destructive font-semibold">+{formatCurrency(installment.moraGenerada)}</span>
                 ) : (
                     <span className="text-muted-foreground">-</span>
                 )}
             </TableCell>
-             <TableCell className="text-right font-mono font-bold">
+            <TableCell className="text-right font-mono font-bold">
                 {formatCurrency(installment.totalAPagar)}
             </TableCell>
         </TableRow>
