@@ -61,13 +61,15 @@ export function ClientSearchCombobox({ onSelect, selectedClient }: ClientSearchC
                             </div>
                             <div className="text-left">
                                 <p className="font-semibold">{selectedClient.clientName}</p>
-                                <p className="text-sm text-muted-foreground">DNI: {selectedClient.clientDNI}</p>
+                                <p className="text-sm text-muted-foreground">
+                                    {selectedClient.clientRUC ? `RUC: ${selectedClient.clientRUC}` : `DNI: ${selectedClient.clientDNI}`}
+                                </p>
                             </div>
                         </div>
                     ) : (
                         <span className="text-muted-foreground flex items-center gap-2">
                             <Search className="h-4 w-4" />
-                            Buscar por DNI o nombre...
+                            Buscar por DNI, RUC o nombre...
                         </span>
                     )}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -76,7 +78,7 @@ export function ClientSearchCombobox({ onSelect, selectedClient }: ClientSearchC
             <PopoverContent className="w-[400px] p-0 bg-popover" align="start">
                 <Command shouldFilter={false}>
                     <CommandInput
-                        placeholder="Ingrese DNI o nombre del cliente..."
+                        placeholder="Ingrese DNI, RUC o nombre..."
                         value={query}
                         onValueChange={setQuery}
                         className="h-12"
@@ -123,7 +125,9 @@ export function ClientSearchCombobox({ onSelect, selectedClient }: ClientSearchC
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-muted-foreground">DNI: {client.clientDNI}</p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {client.clientRUC ? `RUC: ${client.clientRUC}` : `DNI: ${client.clientDNI}`}
+                                            </p>
                                         </div>
                                     </CommandItem>
                                 ))}

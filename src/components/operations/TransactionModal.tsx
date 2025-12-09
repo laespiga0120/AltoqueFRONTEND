@@ -40,19 +40,56 @@ export function TransactionModal({ open, onClose, account }: TransactionModalPro
     const [processing, setProcessing] = useState(false);
     const [transactionId, setTransactionId] = useState('');
 
+    // Calculate total pending debt from installments
+    const totalPendingDebt = account.installments.reduce((sum, inst) => sum + inst.pendingBalance, 0);
+
     const parsedAmount = parseFloat(amount) || 0;
     const { adjustment, rounded } = calculateRounding(parsedAmount);
     const isCash = method === 'cash';
 
+    // Logic to determine what the payment covers
+    const getPaymentCoverage = (payAmount: number) => {
+        let remaining = payAmount;
+        let covered = 0;
+        let partial = false;
+        
+        // This is a simplified simulation for visualization. 
+        // Real logic would be handled by backend or a more complex reducer
+        const affectedInstallments = account.installments.filter(i => i.pendingBalance > 0).map(inst => {
+            if (remaining <= 0) return null;
+            
+            const paying = Math.min(remaining, inst.pendingBalance);
+            remaining -= paying;
+            return {
+                period: inst.period,
+                amount: paying,
+                fullyPaid: paying >= inst.pendingBalance
+            };
+        }).filter(Boolean);
+
+        return affectedInstallments;
+    };
+
+    const coverage = getPaymentCoverage(parsedAmount);
+
     const suggestedAmounts = [
-        { label: 'Pago Mínimo (Saldo anterior)', value: account.previousPendingBalance },
-        { label: 'Cuota del Mes', value: account.currentMonthPayment },
-        { label: 'Deuda Total', value: account.totalDebt },
+        { label: 'Deuda Total', value: totalPendingDebt },
     ].filter(s => s.value > 0);
+    
+    // Add current month installment if available and unpaid
+    const currentInstallment = account.installments.find(i => i.status === 'current' || i.status === 'overdue');
+    if (currentInstallment && currentInstallment.pendingBalance > 0) {
+        suggestedAmounts.unshift({ label: 'Cuota Actual', value: currentInstallment.pendingBalance });
+    }
 
     const handleProcess = () => {
         if (parsedAmount <= 0) {
             toast.error('Ingrese un monto válido');
+            return;
+        }
+
+        if (parsedAmount > totalPendingDebt + 0.1) { // Small buffer for float comparison
+            toast.error('El monto no puede exceder la deuda pendiente total');
             return;
         }
 
@@ -105,9 +142,11 @@ export function TransactionModal({ open, onClose, account }: TransactionModalPro
                         {/* Client Info */}
                         <div className="p-4 rounded-xl bg-secondary/30 border border-border/50">
                             <p className="font-semibold text-lg">{account.clientName}</p>
-                            <p className="text-sm text-muted-foreground">DNI: {account.clientDNI}</p>
+                            <p className="text-sm text-muted-foreground">
+                                {account.clientRUC ? `RUC: ${account.clientRUC}` : `DNI: ${account.clientDNI}`}
+                            </p>
                             <p className="text-sm font-mono mt-2">
-                                Deuda Total: <span className="font-bold text-destructive">{formatCurrency(account.totalDebt)}</span>
+                                Deuda Pendiente: <span className="font-bold text-destructive">{formatCurrency(totalPendingDebt)}</span>
                             </p>
                         </div>
 
@@ -147,7 +186,13 @@ export function TransactionModal({ open, onClose, account }: TransactionModalPro
                                         className="h-14 text-2xl font-mono font-bold text-center"
                                         step="0.01"
                                         min="0"
+                                        max={totalPendingDebt}
                                     />
+                                    {parsedAmount > totalPendingDebt && (
+                                        <p className="text-xs text-destructive text-center font-semibold">
+                                            El monto excede la deuda pendiente ({formatCurrency(totalPendingDebt)})
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* Suggested Amounts */}
@@ -157,15 +202,28 @@ export function TransactionModal({ open, onClose, account }: TransactionModalPro
                                             key={suggestion.label}
                                             variant="outline"
                                             className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors py-2 px-3"
-                                            onClick={() => setAmount(suggestion.value.toString())}
+                                            onClick={() => setAmount(suggestion.value.toFixed(2))}
                                         >
                                             {suggestion.label}: {formatCurrency(suggestion.value)}
                                         </Badge>
                                     ))}
                                 </div>
 
+                                 {/* Coverage Preview */}
+                                 {coverage && coverage.length > 0 && (
+                                     <div className="text-xs text-muted-foreground bg-secondary/20 p-2 rounded-lg space-y-1">
+                                         <p className="font-semibold mb-1">Este pago cubrirá:</p>
+                                         {coverage.map((c: any, i) => (
+                                             <div key={i} className="flex justify-between">
+                                                 <span>Cuota {c.period} ({c.fullyPaid ? 'Completa' : 'Parcial'})</span>
+                                                 <span className="font-mono">{formatCurrency(c.amount)}</span>
+                                             </div>
+                                         ))}
+                                     </div>
+                                 )}
+
                                 {/* Rounding Ticket (Cash Only) */}
-                                {isCash && parsedAmount > 0 && (
+                                {isCash && parsedAmount > 0 && parsedAmount <= totalPendingDebt && (
                                     <div className="p-4 rounded-xl bg-secondary/50 border-2 border-dashed border-border space-y-3">
                                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                             <Receipt className="h-4 w-4" />
@@ -199,7 +257,7 @@ export function TransactionModal({ open, onClose, account }: TransactionModalPro
                                 {/* Process Button */}
                                 <Button
                                     onClick={handleProcess}
-                                    disabled={processing || parsedAmount <= 0}
+                                    disabled={processing || parsedAmount <= 0 || parsedAmount > totalPendingDebt + 0.1}
                                     className="w-full h-14 text-lg font-bold bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-all"
                                 >
                                     {processing ? 'Procesando...' : 'Confirmar Pago'}

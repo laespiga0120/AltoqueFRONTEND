@@ -1,4 +1,4 @@
-export type PaymentStatus = 'current' | 'stopped_interest' | 'overdue';
+export type PaymentStatus = 'pending' | 'current' | 'stopped_interest' | 'overdue' | 'paid';
 export type PaymentMethod = 'cash' | 'yape' | 'plin' | 'card';
 export type TransactionType = 'payment' | 'opening' | 'closing' | 'adjustment';
 
@@ -15,6 +15,7 @@ export interface AccountInstallment {
 
 export interface ClientAccount {
     clientDNI: string;
+    clientRUC?: string;
     clientName: string;
     loanId: string;
     totalDebt: number;

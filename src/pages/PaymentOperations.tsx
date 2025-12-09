@@ -49,7 +49,7 @@ export default function PaymentOperations() {
                         <div>
                             <CardTitle className="text-xl">Buscar Cliente</CardTitle>
                             <CardDescription className="text-base">
-                                Busca por DNI o nombre para ver el estado de cuenta
+                                Busca por DNI, RUC o nombre para ver el estado de cuenta
                             </CardDescription>
                         </div>
                     </div>
@@ -78,9 +78,9 @@ export default function PaymentOperations() {
                                     <CreditCard className="h-6 w-6 text-white" />
                                 </div>
                                 <div>
-                                    <CardTitle className="text-xl">Estado de Cuenta</CardTitle>
+                                    <CardTitle className="text-xl">Estado de Préstamos</CardTitle>
                                     <CardDescription className="text-base">
-                                        {selectedClient.clientName} • DNI: {selectedClient.clientDNI}
+                                        {selectedClient.clientName} • {selectedClient.clientRUC ? `RUC: ${selectedClient.clientRUC}` : `DNI: ${selectedClient.clientDNI}`}
                                     </CardDescription>
                                 </div>
                             </div>

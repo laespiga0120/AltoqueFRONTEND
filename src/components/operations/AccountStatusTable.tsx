@@ -1,4 +1,5 @@
 import { Info, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
     Table,
     TableBody,
@@ -20,16 +21,26 @@ interface AccountStatusTableProps {
     account: ClientAccount;
 }
 
-const statusConfig: Record<PaymentStatus, { label: string; variant: 'default' | 'secondary' | 'destructive'; icon: typeof CheckCircle }> = {
-    current: {
-        label: 'Al día',
-        variant: 'secondary',
+const statusConfig: Record<PaymentStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'success'; icon: any }> = {
+    paid: {
+        label: 'Pagado',
+        variant: 'success', // We might need to add this variant to badge or use a standard one
         icon: CheckCircle,
+    },
+    current: {
+        label: 'PENDIENTE de pago',
+        variant: 'secondary',
+        icon: Clock,
+    },
+    pending: {
+        label: 'Pendiente',
+        variant: 'outline',
+        icon: Clock,
     },
     stopped_interest: {
         label: 'Mora Detenida',
         variant: 'default',
-        icon: Clock,
+        icon: AlertTriangle,
     },
     overdue: {
         label: 'Mora Activa (1%)',
@@ -48,6 +59,10 @@ export function AccountStatusTable({ account }: AccountStatusTableProps) {
             </div>
         );
     }
+
+    // Calculate totals
+    const totalOriginalDebt = account.installments.reduce((sum, inst) => sum + inst.originalAmount, 0);
+    const totalPendingDebt = account.installments.reduce((sum, inst) => sum + inst.pendingBalance, 0);
 
     return (
         <div className="rounded-xl border border-border/50 overflow-hidden bg-card/50">
@@ -71,11 +86,19 @@ export function AccountStatusTable({ account }: AccountStatusTableProps) {
 
             {/* Summary Footer */}
             <div className="p-4 bg-secondary/20 border-t border-border/50">
-                <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-muted-foreground">Deuda Total:</span>
-                    <span className="text-2xl font-bold font-mono text-primary">
-                        {formatCurrency(account.totalDebt)}
-                    </span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-8">
+                     <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-muted-foreground">Deuda Original:</span>
+                        <span className="text-xl font-bold font-mono text-muted-foreground">
+                            {formatCurrency(totalOriginalDebt)}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-muted-foreground">Deuda Pendiente:</span>
+                        <span className="text-2xl font-bold font-mono text-primary">
+                            {formatCurrency(totalPendingDebt)}
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -85,6 +108,10 @@ export function AccountStatusTable({ account }: AccountStatusTableProps) {
 function InstallmentRow({ installment }: { installment: AccountInstallment }) {
     const config = statusConfig[installment.status];
     const StatusIcon = config.icon;
+
+    // Determine badge variant style manually if 'success' isn't supported by default UI lib
+    const badgeVariant = config.variant === 'success' ? 'default' : config.variant as any;
+    const badgeClassName = config.variant === 'success' ? 'bg-green-600 hover:bg-green-700' : '';
 
     return (
         <TableRow className="hover:bg-secondary/10 transition-colors">
@@ -106,7 +133,7 @@ function InstallmentRow({ installment }: { installment: AccountInstallment }) {
                     <span className={installment.pendingBalance > 0 ? 'text-destructive font-semibold' : 'text-muted-foreground'}>
                         {formatCurrency(installment.pendingBalance)}
                     </span>
-                    {installment.hasPartialPayment && (
+                    {installment.hasPartialPayment && installment.pendingBalance > 0 && (
                         <Tooltip>
                             <TooltipTrigger>
                                 <Info className="h-4 w-4 text-primary cursor-help" />
@@ -115,7 +142,6 @@ function InstallmentRow({ installment }: { installment: AccountInstallment }) {
                                 <p className="font-semibold mb-1">Pago parcial realizado</p>
                                 <p className="text-sm text-muted-foreground">
                                     Abono de {formatCurrency(installment.partialPaymentAmount || 0)}.
-                                    Sin mora. Saldo sumado al mes siguiente.
                                 </p>
                             </TooltipContent>
                         </Tooltip>
@@ -124,8 +150,8 @@ function InstallmentRow({ installment }: { installment: AccountInstallment }) {
             </TableCell>
             <TableCell>
                 <Badge
-                    variant={config.variant}
-                    className="gap-1.5"
+                    variant={badgeVariant}
+                    className={cn("gap-1.5", badgeClassName)}
                 >
                     <StatusIcon className="h-3 w-3" />
                     {config.label}

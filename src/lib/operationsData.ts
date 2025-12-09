@@ -9,23 +9,23 @@ export const MOCK_CLIENT_ACCOUNTS: ClientAccount[] = [
         clientDNI: '12345678',
         clientName: 'Juan Carlos Vilca Jimenez',
         loanId: '1',
-        totalDebt: 3245.50,
+        totalDebt: 3245.50, // This is legacy, will be calculated dynamically in UI but kept for now
         currentMonthPayment: 1050.00,
         previousPendingBalance: 195.50,
         installments: [
             {
                 period: 1,
-                dueDate: '2025-01-10',
+                dueDate: '2024-11-10',
                 originalAmount: 1050.00,
-                pendingBalance: 195.50,
-                status: 'stopped_interest',
-                generatedInterest: 0,
+                pendingBalance: 195.50 + 1.95, // 195.50 remaining + 1% mora
+                status: 'overdue', 
+                generatedInterest: 1.95, // 1% of 195.50
                 hasPartialPayment: true,
                 partialPaymentAmount: 854.50,
             },
             {
                 period: 2,
-                dueDate: '2025-02-10',
+                dueDate: '2024-12-10',
                 originalAmount: 1050.00,
                 pendingBalance: 1050.00,
                 status: 'current',
@@ -34,10 +34,10 @@ export const MOCK_CLIENT_ACCOUNTS: ClientAccount[] = [
             },
             {
                 period: 3,
-                dueDate: '2025-03-10',
+                dueDate: '2025-01-10',
                 originalAmount: 1050.00,
                 pendingBalance: 1050.00,
-                status: 'current',
+                status: 'pending',
                 generatedInterest: 0,
                 hasPartialPayment: false,
             },
@@ -53,25 +53,25 @@ export const MOCK_CLIENT_ACCOUNTS: ClientAccount[] = [
         installments: [
             {
                 period: 1,
-                dueDate: '2024-12-15',
+                dueDate: '2024-10-15',
                 originalAmount: 875.00,
                 pendingBalance: 0,
-                status: 'current',
+                status: 'paid',
                 generatedInterest: 0,
                 hasPartialPayment: false,
             },
             {
                 period: 2,
-                dueDate: '2025-01-15',
+                dueDate: '2024-11-15',
                 originalAmount: 875.00,
-                pendingBalance: 882.40,
+                pendingBalance: 875.00 + 8.75,
                 status: 'overdue',
-                generatedInterest: 7.40,
+                generatedInterest: 8.75, // 1% of 875
                 hasPartialPayment: false,
             },
             {
                 period: 3,
-                dueDate: '2025-02-15',
+                dueDate: '2024-12-15',
                 originalAmount: 875.00,
                 pendingBalance: 875.00,
                 status: 'current',
@@ -80,28 +80,10 @@ export const MOCK_CLIENT_ACCOUNTS: ClientAccount[] = [
             },
             {
                 period: 4,
-                dueDate: '2025-03-15',
+                dueDate: '2025-01-15',
                 originalAmount: 875.00,
                 pendingBalance: 875.00,
-                status: 'current',
-                generatedInterest: 0,
-                hasPartialPayment: false,
-            },
-            {
-                period: 5,
-                dueDate: '2025-04-15',
-                originalAmount: 875.00,
-                pendingBalance: 875.00,
-                status: 'current',
-                generatedInterest: 0,
-                hasPartialPayment: false,
-            },
-            {
-                period: 6,
-                dueDate: '2025-05-15',
-                originalAmount: 875.00,
-                pendingBalance: 875.00,
-                status: 'current',
+                status: 'pending',
                 generatedInterest: 0,
                 hasPartialPayment: false,
             },
@@ -115,6 +97,44 @@ export const MOCK_CLIENT_ACCOUNTS: ClientAccount[] = [
         currentMonthPayment: 0,
         previousPendingBalance: 0,
         installments: [],
+    },
+    {
+        clientDNI: '10987654',
+        clientRUC: '20123456789',
+        clientName: 'Empresa de Transportes S.A.C.',
+        loanId: '4',
+        totalDebt: 1500.00,
+        currentMonthPayment: 500.00,
+        previousPendingBalance: 0,
+        installments: [
+             {
+                period: 1,
+                dueDate: '2025-01-20',
+                originalAmount: 500.00,
+                pendingBalance: 500.00,
+                status: 'current',
+                generatedInterest: 0,
+                hasPartialPayment: false,
+            },
+            {
+                period: 2,
+                dueDate: '2025-02-20',
+                originalAmount: 500.00,
+                pendingBalance: 500.00,
+                status: 'current',
+                generatedInterest: 0,
+                hasPartialPayment: false,
+            },
+            {
+                period: 3,
+                dueDate: '2025-03-20',
+                originalAmount: 500.00,
+                pendingBalance: 500.00,
+                status: 'current',
+                generatedInterest: 0,
+                hasPartialPayment: false,
+            },
+        ],
     },
 ];
 
@@ -229,6 +249,7 @@ export function searchClients(query: string): ClientAccount[] {
     return MOCK_CLIENT_ACCOUNTS.filter(
         client =>
             client.clientDNI.includes(normalizedQuery) ||
+            (client.clientRUC && client.clientRUC.includes(normalizedQuery)) ||
             client.clientName.toLowerCase().includes(normalizedQuery)
     );
 }
