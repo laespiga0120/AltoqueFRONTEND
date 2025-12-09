@@ -19,7 +19,7 @@ export const MercadoPagoButton = ({ loanId, amount, clientName, disabled }: Merc
 
   // 1. Inicializar Mercado Pago con tu clave pública real
   useEffect(() => {
-    initMercadoPago('APP_USR-e97e978a-282e-47b0-8980-a273fe44a12e', {
+    initMercadoPago('APP_USR-f13ef2eb-b631-4ea2-ad78-6ccd52b7f350', {
         locale: 'es-PE' 
     });
   }, []);
