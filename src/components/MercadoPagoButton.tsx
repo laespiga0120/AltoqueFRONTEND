@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Loader2, CreditCard } from "lucide-react";
 import { toast } from 'sonner';
 import { authService } from '@/api/authService';
-// Importamos el SDK que ya tienes instalado
 import { initMercadoPago, Wallet } from '@mercadopago/sdk-react';
 
 interface MercadoPagoButtonProps {
@@ -17,96 +16,92 @@ export const MercadoPagoButton = ({ loanId, amount, clientName, disabled }: Merc
   const [loading, setLoading] = useState(false);
   const [preferenceId, setPreferenceId] = useState<string | null>(null);
 
-  // 1. Inicializar Mercado Pago con tu clave pública real
+  // Inicializar con tu PUBLIC KEY de PRODUCCIÓN
   useEffect(() => {
     initMercadoPago('APP_USR-f13ef2eb-b631-4ea2-ad78-6ccd52b7f350', {
         locale: 'es-PE' 
     });
   }, []);
 
-  // Si el usuario cambia el monto, reseteamos para que tenga que generar una nueva preferencia
   useEffect(() => {
     setPreferenceId(null);
   }, [amount, loanId]);
 
   const handleGeneratePreference = async () => {
-  try {
-    setLoading(true);
-    const API_URL = import.meta.env.VITE_API_URL || 'https://al-toque-d0b27cb5aec4.herokuapp.com/api';
-    let token = authService.getToken();
-
-    if (!token) {
-      toast.error("Sesión expirada");
-      return;
-    }
-    token = token.replace(/"/g, '').trim();
-
-    const payload = {
-      prestamoId: loanId,
-      monto: amount,
-      metodoPago: "MERCADO_PAGO",
-      descripcion: `Cuota Préstamo #${loanId} - ${clientName}`
-    };
-
-    console.log('📤 Enviando solicitud:', payload);
-
-    const response = await fetch(`${API_URL}/pagos/crear-preferencia`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` 
-      },
-      body: JSON.stringify(payload)
-    });
-
-    // Primero obtén el texto de la respuesta
-    const responseText = await response.text();
-    console.log('📥 Respuesta raw:', responseText);
-
-    if (!response.ok) {
-      let errorMessage = "Error al generar preferencia";
-      try {
-        const errorData = JSON.parse(responseText);
-        errorMessage = errorData.error || errorMessage;
-      } catch (e) {
-        console.error('Error parseando respuesta de error:', e);
-      }
-      throw new Error(errorMessage);
-    }
-
-    // Intentar parsear el JSON
-    let data;
     try {
-      data = JSON.parse(responseText);
-      console.log('✅ Datos parseados:', data);
-    } catch (parseError) {
-      console.error('❌ Error parseando JSON:', parseError);
-      console.error('Texto recibido:', responseText);
-      throw new Error('Respuesta inválida del servidor');
-    }
-    
-    if (data.preferenceId) {
-      setPreferenceId(data.preferenceId);
-      toast.success("Preferencia generada correctamente");
-    } else {
-      throw new Error('No se recibió el ID de preferencia');
-    }
+      setLoading(true);
+      
+      // URL de producción
+      const API_URL = import.meta.env.VITE_API_URL || 'https://al-toque-d0b27cb5aec4.herokuapp.com/api';
+      
+      let token = authService.getToken();
+      if (!token) {
+        toast.error("Sesión expirada");
+        return;
+      }
+      token = token.replace(/"/g, '').trim();
 
-  } catch (error: any) {
-    console.error("❌ Error completo:", error);
-    toast.error(error.message || "Error al conectar con Mercado Pago");
-  } finally {
-    setLoading(false);
-  }
-};
+      const payload = {
+        prestamoId: loanId,
+        monto: amount,
+        metodoPago: "MERCADO_PAGO",
+        descripcion: `Cuota Préstamo #${loanId} - ${clientName}`
+      };
 
-  // VISTA 1: Botón oficial de Mercado Pago (aparece cuando ya tenemos el ID)
+      console.log('📤 Enviando solicitud:', payload);
+
+      const response = await fetch(`${API_URL}/pagos/crear-preferencia`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const responseText = await response.text();
+      console.log('📥 Respuesta raw:', responseText);
+
+      if (!response.ok) {
+        let errorMessage = "Error al generar preferencia";
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          console.error('Error parseando respuesta de error:', e);
+        }
+        throw new Error(errorMessage);
+      }
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('✅ Datos parseados:', data);
+      } catch (parseError) {
+        console.error('❌ Error parseando JSON:', parseError);
+        throw new Error('Respuesta inválida del servidor');
+      }
+      
+      if (data.preferenceId) {
+        setPreferenceId(data.preferenceId);
+        toast.success("Redirigiendo a Mercado Pago...");
+      } else {
+        throw new Error('No se recibió el ID de preferencia');
+      }
+
+    } catch (error: any) {
+      console.error("❌ Error completo:", error);
+      toast.error(error.message || "Error al conectar con Mercado Pago");
+    } finally {
+      setLoading(false);
+    }
+  };
   if (preferenceId) {
     return (
         <div className="w-full animate-in fade-in zoom-in duration-300">
             <div className="my-2">
                 <Wallet 
-                    initialization={{ preferenceId: preferenceId }} 
+                    initialization={{ preferenceId: preferenceId }}
                 />
             </div>
             <Button 
@@ -120,8 +115,8 @@ export const MercadoPagoButton = ({ loanId, amount, clientName, disabled }: Merc
         </div>
     );
   }
+  
 
-  // VISTA 2: Botón para solicitar la preferencia al Backend
   return (
     <Button 
       onClick={handleGeneratePreference} 
