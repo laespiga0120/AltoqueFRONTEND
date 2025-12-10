@@ -1,23 +1,118 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Landmark, Banknote, Smartphone } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ArrowLeft, Landmark, Banknote, Smartphone, LockOpen } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { SummaryCards } from '@/components/cashregister/SummaryCards';
 import { TransactionLogTable } from '@/components/cashregister/TransactionLogTable';
 import { ClosurePanel } from '@/components/cashregister/ClosurePanel';
-import { getCashRegisterSummary } from '@/lib/operationsData';
+import { getCashRegisterSummary, openCashRegister, closeCashRegister as closeCashRegisterLib } from '@/lib/operationsData';
 import { toast } from 'sonner';
 
 export default function CashRegister() {
     const navigate = useNavigate();
-    const [summary, setSummary] = useState(getCashRegisterSummary);
+    // Force re-render on mount to catch localStorage changes
+    const [summary, setSummary] = useState(getCashRegisterSummary());
+    const [initialBalance, setInitialBalance] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        setSummary(getCashRegisterSummary());
+    }, []);
+
+    const handleOpenCash = (e: React.FormEvent) => {
+        e.preventDefault();
+        const amount = parseFloat(initialBalance);
+        
+        if (isNaN(amount) || amount < 0) {
+            toast.error('Ingrese un monto válido');
+            return;
+        }
+
+        setIsSubmitting(true);
+        // Simulate API delay
+        setTimeout(() => {
+            openCashRegister(amount, 'admin'); // Hardcoded operator for now
+            setSummary(getCashRegisterSummary());
+            toast.success('Caja abierta correctamente');
+            setIsSubmitting(false);
+        }, 800);
+    };
 
     const handleCloseCash = () => {
-        setSummary(prev => ({ ...prev, status: 'closed' }));
+        closeCashRegisterLib();
+        setSummary(getCashRegisterSummary());
         toast.success('Caja cerrada correctamente');
     };
+
+    // If closed, show Opening Form
+    if (summary.status === 'closed') {
+        return (
+            <div className="max-w-md mx-auto mt-20 space-y-6">
+                 <div className="flex items-center gap-4 mb-8">
+                    <Button
+                        variant="ghost"
+                        onClick={() => navigate('/')}
+                        className="gap-2"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                        Volver al Inicio
+                    </Button>
+                </div>
+
+                <Card className="border-0 shadow-xl overflow-hidden">
+                    <div className="h-2 bg-gradient-to-r from-primary to-accent" />
+                    <CardHeader className="text-center pb-2">
+                        <div className="mx-auto p-4 rounded-full bg-primary/10 w-fit mb-4">
+                            <LockOpen className="h-8 w-8 text-primary" />
+                        </div>
+                        <CardTitle className="text-2xl">Apertura de Caja</CardTitle>
+                        <CardDescription>
+                            Ingrese el saldo inicial para comenzar las operaciones del día.
+                        </CardDescription>
+                    </CardHeader>
+                    <form onSubmit={handleOpenCash}>
+                        <CardContent className="space-y-4 pt-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="initialBalance">Saldo Inicial (Efectivo)</Label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">S/</span>
+                                    <Input
+                                        id="initialBalance"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        placeholder="0.00"
+                                        className="pl-9 text-lg"
+                                        value={initialBalance}
+                                        onChange={(e) => setInitialBalance(e.target.value)}
+                                        autoFocus
+                                        required
+                                    />
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Este monto representa el dinero físico existente en caja al inicio del turno.
+                                </p>
+                            </div>
+                        </CardContent>
+                        <CardFooter>
+                            <Button 
+                                type="submit" 
+                                className="w-full bg-gradient-to-r from-primary to-accent text-white font-medium"
+                                size="lg"
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? 'Abriendo...' : 'Abrir Caja'}
+                            </Button>
+                        </CardFooter>
+                    </form>
+                </Card>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-7xl mx-auto space-y-6">
@@ -99,32 +194,11 @@ export default function CashRegister() {
 
                 {/* Closure Panel - Takes 1 column */}
                 <div className="xl:col-span-1">
-                    {summary.status === 'open' ? (
-                        <ClosurePanel
-                            theoreticalTotal={summary.theoreticalTotal}
-                            onClose={handleCloseCash}
-                        />
-                    ) : (
-                        <Card
-                            className="border-0 overflow-hidden"
-                            style={{
-                                background: 'var(--gradient-card)',
-                                boxShadow: 'var(--shadow-card)'
-                            }}
-                        >
-                            <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-                                <div className="p-4 rounded-full bg-green-100 mb-4">
-                                    <Landmark className="h-12 w-12 text-green-600" />
-                                </div>
-                                <h3 className="text-xl font-bold text-green-600 mb-2">
-                                    Caja Cerrada
-                                </h3>
-                                <p className="text-muted-foreground">
-                                    El arqueo del día ha sido completado
-                                </p>
-                            </CardContent>
-                        </Card>
-                    )}
+                    {/* Since we are handling "closed" state at the top level, this part will mostly be for "open" state actions */}
+                    <ClosurePanel
+                        theoreticalTotal={summary.theoreticalTotal}
+                        onClose={handleCloseCash}
+                    />
                 </div>
             </div>
         </div>

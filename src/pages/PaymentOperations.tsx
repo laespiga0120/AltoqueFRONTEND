@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Receipt, CreditCard, Loader2 } from 'lucide-react';
+import { ArrowLeft, Receipt, CreditCard, Loader2, Lock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ClientSearchCombobox } from '@/components/operations/ClientSearchCombobox';
@@ -9,16 +9,26 @@ import { TransactionModal } from '@/components/operations/TransactionModal';
 import { ClientAccount } from '@/types/operations';
 import { operationsService } from '@/api/operationsService';
 import { ClientSearchResult } from '@/api/clientService'; // Importamos el tipo extendido
+import { isCashRegisterOpen } from '@/lib/operationsData';
 import { toast } from 'sonner';
 
 export default function PaymentOperations() {
     const navigate = useNavigate();
+    const [isAllowed, setIsAllowed] = useState(false);
     
     // Usamos el tipo correcto que incluye idCliente
     const [selectedClientData, setSelectedClientData] = useState<ClientSearchResult | null>(null);
     const [accountStatus, setAccountStatus] = useState<ClientAccount | null>(null);
     const [loadingAccount, setLoadingAccount] = useState(false);
     const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+
+    useEffect(() => {
+        if (!isCashRegisterOpen()) {
+            setIsAllowed(false);
+        } else {
+            setIsAllowed(true);
+        }
+    }, []);
 
     const fetchAccountStatus = async (clientId: number) => {
         setLoadingAccount(true);
@@ -57,6 +67,37 @@ export default function PaymentOperations() {
                 .catch(err => console.error("Error refreshing data:", err));
         }
     };
+
+    if (!isAllowed) {
+        return (
+            <div className="max-w-md mx-auto mt-20 text-center space-y-6">
+                <div className="mx-auto p-6 rounded-full bg-secondary/30 w-fit">
+                    <Lock className="h-16 w-16 text-muted-foreground" />
+                </div>
+                <div className="space-y-2">
+                    <h2 className="text-2xl font-bold">Caja Cerrada</h2>
+                    <p className="text-muted-foreground">
+                        Para realizar operaciones de pago, primero debe abrir la caja del día.
+                    </p>
+                </div>
+                <div className="flex flex-col gap-3 pt-4">
+                    <Button 
+                        onClick={() => navigate('/cash-register')}
+                        className="w-full bg-gradient-to-r from-primary to-accent text-white"
+                        size="lg"
+                    >
+                        Ir a Arqueo de Caja
+                    </Button>
+                    <Button 
+                        variant="ghost"
+                        onClick={() => navigate('/')}
+                    >
+                        Volver al Inicio
+                    </Button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-6xl mx-auto space-y-6">
