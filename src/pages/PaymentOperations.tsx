@@ -20,32 +20,41 @@ export default function PaymentOperations() {
     const [loadingAccount, setLoadingAccount] = useState(false);
     const [paymentModalOpen, setPaymentModalOpen] = useState(false);
 
+    const fetchAccountStatus = async (clientId: number) => {
+        setLoadingAccount(true);
+        try {
+            console.log(`🔍 Consultando estado de cuenta para ID: ${clientId}`);
+            const status = await operationsService.getAccountStatusByClient(clientId);
+            setAccountStatus(status);
+        } catch (error) {
+            console.error("Error fetching account status:", error);
+            toast.error("No se pudo cargar el estado de cuenta", {
+                description: "Verifique si el cliente tiene un préstamo activo."
+            });
+        } finally {
+            setLoadingAccount(false);
+        }
+    };
+
     const handleClientSelect = async (client: ClientSearchResult | null) => {
         setSelectedClientData(client);
         setAccountStatus(null); 
 
         // Verificamos idCliente explícitamente
         if (client && client.idCliente) {
-            setLoadingAccount(true);
-            try {
-                // Llamamos al servicio usando el ID mapeado
-                console.log(`🔍 Consultando estado de cuenta para ID: ${client.idCliente}`);
-                const status = await operationsService.getAccountStatusByClient(client.idCliente);
-                setAccountStatus(status);
-            } catch (error) {
-                console.error("Error fetching account status:", error);
-                toast.error("No se pudo cargar el estado de cuenta", {
-                    description: "Verifique si el cliente tiene un préstamo activo."
-                });
-            } finally {
-                setLoadingAccount(false);
-            }
+            await fetchAccountStatus(client.idCliente);
         }
     };
 
     const handlePaymentSuccess = () => {
-        if (selectedClientData) {
-            handleClientSelect(selectedClientData);
+        // Recargamos los datos SIN poner en null el estado anterior para evitar que el modal se cierre
+        if (selectedClientData && selectedClientData.idCliente) {
+             const clientId = selectedClientData.idCliente;
+             // Ejecutamos la actualización en segundo plano (o con loading discreto si se prefiere)
+             // pero IMPORTANTE: No llamamos a setAccountStatus(null) aquí.
+             operationsService.getAccountStatusByClient(clientId)
+                .then(status => setAccountStatus(status))
+                .catch(err => console.error("Error refreshing data:", err));
         }
     };
 

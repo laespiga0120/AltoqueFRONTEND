@@ -86,6 +86,27 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
         }
     };
 
+    const handleSendEmail = () => {
+        const subject = encodeURIComponent(`Comprobante de Pago - ${account.clienteNombre}`);
+        const body = encodeURIComponent(`
+Estimado(a) ${account.clienteNombre},
+
+Se ha registrado su pago correctamente.
+
+Detalles de la Operación:
+-------------------------
+Monto Pagado: ${formatCurrency(parsedAmount)}
+Fecha: ${new Date().toLocaleString()}
+Documento: ${account.documento}
+
+Deuda Restante: ${paymentResult?.deudaRestante ? formatCurrency(paymentResult.deudaRestante) : 'N/A'}
+
+Gracias por su preferencia.
+La Espiga
+        `);
+        window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+    };
+
     const handleNewOperation = () => {
         setStep('input');
         setAmount('');
@@ -278,6 +299,12 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                             </Button>
                             <Button onClick={handleDownload} variant="outline" className="w-full">
                                 <Download className="h-4 w-4 mr-2"/> Descargar
+                            </Button>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 gap-3">
+                            <Button onClick={handleSendEmail} variant="outline" className="w-full">
+                                <Mail className="h-4 w-4 mr-2"/> Enviar por Correo
                             </Button>
                         </div>
 
