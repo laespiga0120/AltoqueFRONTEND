@@ -94,7 +94,7 @@ export function ClientSearchCombobox({ onSelect, selectedClient }: ClientSearchC
                     ) : (
                         <span className="text-muted-foreground flex items-center gap-2">
                             <Search className="h-4 w-4" />
-                            Buscar por DNI, RUC o nombre...
+                            Buscar por DNI o RUC
                         </span>
                     )}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

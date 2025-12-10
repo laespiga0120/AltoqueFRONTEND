@@ -1,43 +1,43 @@
 import { Wallet, ArrowDownCircle, Coins, Smartphone, Calculator } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { CashRegisterSummary } from '@/types/operations';
-import { formatCurrency } from '@/lib/operationsData';
+import { Caja } from '@/types/operations'; // Usamos el tipo correcto
+import { formatCurrency } from '@/lib/operationsData'; // Asumiendo que tienes esta utilidad
 import { cn } from '@/lib/utils';
 
 interface SummaryCardsProps {
-    summary: CashRegisterSummary;
+    caja: Caja;
 }
 
-export function SummaryCards({ summary }: SummaryCardsProps) {
+export function SummaryCards({ caja }: SummaryCardsProps) {
     const cards = [
         {
             label: 'Saldo Inicial',
-            value: summary.openingBalance,
+            value: caja.saldoInicial,
             icon: Wallet,
             iconBg: 'bg-blue-100 text-blue-600',
         },
         {
             label: 'Entradas Efectivo',
-            value: summary.cashEntries,
+            value: caja.totalEfectivoSistema,
             icon: ArrowDownCircle,
             iconBg: 'bg-green-100 text-green-600',
         },
         {
             label: 'Ajuste Redondeo',
-            value: summary.roundingAdjustment,
+            value: caja.totalAjusteRedondeo,
             icon: Coins,
-            iconBg: summary.roundingAdjustment >= 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600',
+            iconBg: caja.totalAjusteRedondeo >= 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600',
             showSign: true,
         },
         {
             label: 'Entradas Digitales',
-            value: summary.digitalEntries,
+            value: caja.totalDigitalSistema,
             icon: Smartphone,
             iconBg: 'bg-purple-100 text-purple-600',
         },
         {
             label: 'Total en Caja (Teórico)',
-            value: summary.theoreticalTotal,
+            value: caja.saldoFinalEsperado,
             icon: Calculator,
             iconBg: 'bg-primary/20 text-primary',
             highlight: true,

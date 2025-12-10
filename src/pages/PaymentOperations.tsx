@@ -8,26 +8,33 @@ import { AccountStatusTable } from '@/components/operations/AccountStatusTable';
 import { TransactionModal } from '@/components/operations/TransactionModal';
 import { ClientAccount } from '@/types/operations';
 import { operationsService } from '@/api/operationsService';
-import { ClientSearchResult } from '@/api/clientService'; // Importamos el tipo extendido
-import { isCashRegisterOpen } from '@/lib/operationsData';
+import { ClientSearchResult } from '@/api/clientService';
+import { cajaService } from '@/api/cajaService'; // Usamos el servicio real para verificar caja
 import { toast } from 'sonner';
 
 export default function PaymentOperations() {
     const navigate = useNavigate();
     const [isAllowed, setIsAllowed] = useState(false);
+    const [checkingCaja, setCheckingCaja] = useState(true);
     
-    // Usamos el tipo correcto que incluye idCliente
     const [selectedClientData, setSelectedClientData] = useState<ClientSearchResult | null>(null);
     const [accountStatus, setAccountStatus] = useState<ClientAccount | null>(null);
     const [loadingAccount, setLoadingAccount] = useState(false);
     const [paymentModalOpen, setPaymentModalOpen] = useState(false);
 
+    // 1. Verificar si la caja está abierta al cargar la página
     useEffect(() => {
-        if (!isCashRegisterOpen()) {
-            setIsAllowed(false);
-        } else {
-            setIsAllowed(true);
-        }
+        const checkCaja = async () => {
+            try {
+                await cajaService.obtenerCajaActual();
+                setIsAllowed(true);
+            } catch (error) {
+                setIsAllowed(false);
+            } finally {
+                setCheckingCaja(false);
+            }
+        };
+        checkCaja();
     }, []);
 
     const fetchAccountStatus = async (clientId: number) => {
@@ -41,6 +48,7 @@ export default function PaymentOperations() {
             toast.error("No se pudo cargar el estado de cuenta", {
                 description: "Verifique si el cliente tiene un préstamo activo."
             });
+            setAccountStatus(null);
         } finally {
             setLoadingAccount(false);
         }
@@ -50,23 +58,29 @@ export default function PaymentOperations() {
         setSelectedClientData(client);
         setAccountStatus(null); 
 
-        // Verificamos idCliente explícitamente
         if (client && client.idCliente) {
             await fetchAccountStatus(client.idCliente);
         }
     };
 
     const handlePaymentSuccess = () => {
-        // Recargamos los datos SIN poner en null el estado anterior para evitar que el modal se cierre
+        // Al terminar el pago, recargamos la tabla silenciosamente
         if (selectedClientData && selectedClientData.idCliente) {
              const clientId = selectedClientData.idCliente;
-             // Ejecutamos la actualización en segundo plano (o con loading discreto si se prefiere)
-             // pero IMPORTANTE: No llamamos a setAccountStatus(null) aquí.
              operationsService.getAccountStatusByClient(clientId)
                 .then(status => setAccountStatus(status))
                 .catch(err => console.error("Error refreshing data:", err));
         }
+        setPaymentModalOpen(false); // Cerramos el modal tras el éxito
     };
+
+    if (checkingCaja) {
+        return (
+            <div className="flex justify-center items-center h-screen">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     if (!isAllowed) {
         return (
@@ -100,7 +114,7 @@ export default function PaymentOperations() {
     }
 
     return (
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className="max-w-6xl mx-auto space-y-6 p-4">
             {/* Header */}
             <div className="flex items-center gap-4">
                 <Button variant="outline" onClick={() => navigate('/')} className="gap-2">
@@ -154,7 +168,7 @@ export default function PaymentOperations() {
                                 <div>
                                     <CardTitle className="text-xl">Estado de Préstamo</CardTitle>
                                     <CardDescription>
-                                        {accountStatus.clienteNombre} • {accountStatus.documento}
+                                        {accountStatus.tipoCliente === 'JURIDICA' ? accountStatus.razonSocial : accountStatus.clienteNombre} • {accountStatus.documento}
                                     </CardDescription>
                                 </div>
                             </div>

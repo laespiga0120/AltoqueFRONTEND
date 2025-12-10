@@ -11,10 +11,10 @@ import { cn } from '@/lib/utils';
 
 interface ClosurePanelProps {
     theoreticalTotal: number;
-    onClose: () => void;
+    onCloseRegister: (amount: number) => void; // Cambié el nombre para ser más explícito
 }
 
-export function ClosurePanel({ theoreticalTotal, onClose }: ClosurePanelProps) {
+export function ClosurePanel({ theoreticalTotal, onCloseRegister }: ClosurePanelProps) {
     const [countedCash, setCountedCash] = useState('');
     const [processing, setProcessing] = useState(false);
 
@@ -33,7 +33,7 @@ export function ClosurePanel({ theoreticalTotal, onClose }: ClosurePanelProps) {
         setTimeout(() => {
             toast.success('Caja cerrada exitosamente. Reporte generado.');
             setProcessing(false);
-            onClose();
+            onCloseRegister(counted);
         }, 1500);
     };
 

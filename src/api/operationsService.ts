@@ -1,21 +1,19 @@
 import apiClient from './apiClient';
-import { ClientAccount, PaymentRequest, PaymentResponse } from '@/types/operations';
+import { ClientAccount, PagoRequest, PagoResponse } from '@/types/operations';
 
 export const operationsService = {
-  // Obtener estado de cuenta REAL por ID de cliente
+  // 1. Obtener estado de cuenta (Funcionalidad existente recuperada)
+  // Llama al endpoint GET /api/operaciones/estado-cuenta/cliente/{id}
   getAccountStatusByClient: async (clientId: number): Promise<ClientAccount> => {
     const response = await apiClient<ClientAccount>(`/api/operaciones/estado-cuenta/cliente/${clientId}`);
     return response;
   },
 
-  // Procesar un pago REAL
-  processPayment: async (data: PaymentRequest): Promise<PaymentResponse> => {
-    const response = await apiClient<PaymentResponse>('/api/operaciones/procesar-pago', {
+  // 2. Procesar pago (Nueva funcionalidad con Caja)
+  // Llama al endpoint POST /api/operaciones/procesar-pago
+  processPayment: async (data: PagoRequest): Promise<PagoResponse> => {
+    const response = await apiClient<PagoResponse>('/api/operaciones/procesar-pago', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // Envío directo del objeto
       body: data, 
     });
     return response;

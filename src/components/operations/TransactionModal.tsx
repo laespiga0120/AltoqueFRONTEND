@@ -18,10 +18,9 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { ClientAccount, PaymentMethod, PaymentResponse } from '@/types/operations';
+import { ClientAccount, PagoResponse, PagoRequest } from '@/types/operations';
 import { formatCurrency, calculateRounding} from '@/lib/operationsData';
 import { operationsService } from '@/api/operationsService';
-// Importamos el componente que acabamos de crear
 import { MercadoPagoButton } from '@/components/MercadoPagoButton';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -41,7 +40,7 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
     const [tab, setTab] = useState<string>('EFECTIVO');
     
     const [processing, setProcessing] = useState(false);
-    const [paymentResult, setPaymentResult] = useState<PaymentResponse | null>(null);
+    const [paymentResult, setPaymentResult] = useState<PagoResponse | null>(null);
 
     const totalPendingDebt = account?.deudaPendienteTotal || 0;
     const parsedAmount = parseFloat(amount) || 0;
@@ -51,9 +50,10 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
         { label: 'Deuda Total', value: totalPendingDebt },
     ].filter(s => s.value > 0);
     
+    // Buscar cuota pendiente más antigua
     const currentInstallment = account?.cuotas?.find(c => c.totalAPagar > 0);
     if (currentInstallment) {
-        suggestedAmounts.unshift({ label: 'Cuota Actual', value: currentInstallment.totalAPagar });
+        suggestedAmounts.unshift({ label: `Cuota ${currentInstallment.numeroCuota}`, value: currentInstallment.totalAPagar });
     }
 
     const handleCashProcess = async () => {
@@ -61,26 +61,28 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
             toast.error('Ingrese un monto válido');
             return;
         }
-        if (parsedAmount > totalPendingDebt + 0.5) { 
-            toast.error('El monto excede la deuda total');
-            return;
-        }
 
         setProcessing(true);
         try {
-            const response = await operationsService.processPayment({
+            // Construimos el DTO exacto que Java espera
+            const requestPayload: PagoRequest = {
                 prestamoId: account.prestamoId,
                 monto: parsedAmount,
-                metodoPago: 'EFECTIVO' as PaymentMethod 
-            });
+                metodoPago: 'EFECTIVO',
+                descripcion: `Pago en efectivo - ${account.clienteNombre}`
+            };
+
+            const response = await operationsService.processPayment(requestPayload);
 
             setPaymentResult(response);
             setStep('success');
             toast.success('Pago registrado correctamente');
-            onSuccess(); 
+            
+            // Notificamos al padre pero NO cerramos el modal aun para que vea el voucher
+            // El cierre real se hace al dar click en "Nueva Operación" o cerrar el dialogo
         } catch (error) {
             console.error(error);
-            toast.error('Error registrando pago');
+            toast.error('Error procesando el pago. Intente nuevamente.');
         } finally {
             setProcessing(false);
         }
@@ -112,13 +114,12 @@ La Espiga
         setAmount('');
         setTab('EFECTIVO');
         setPaymentResult(null);
-        onClose();
+        onSuccess(); // Aquí notificamos al padre para que refresque datos
     };
 
     const generatePDF = () => {
         const doc = new jsPDF();
         
-        // Título y Cabecera
         doc.setFontSize(16);
         doc.text('COMPROBANTE DE PAGO', 105, 20, { align: 'center' });
         
@@ -126,7 +127,6 @@ La Espiga
         doc.text(`Fecha: ${new Date().toLocaleString()}`, 105, 30, { align: 'center' });
         doc.text('La Espiga - Préstamos', 105, 36, { align: 'center' });
 
-        // Detalles del Cliente
         doc.setFontSize(11);
         doc.text('Detalles del Cliente:', 14, 50);
         
@@ -134,9 +134,8 @@ La Espiga
         doc.text(`Cliente: ${account.clienteNombre}`, 14, 58);
         doc.text(`Documento: ${account.documento}`, 14, 64);
         
-        // Tabla de detalles del pago
         const tableData = [
-            ['Concepto', 'Monto'],
+            ['Concepto', 'Valor'],
             ['Monto Recibido', formatCurrency(parsedAmount)],
             ['Ajuste Redondeo', formatCurrency(adjustment)],
             ['Total Cobrado', formatCurrency(rounded)],
@@ -148,13 +147,23 @@ La Espiga
 
         autoTable(doc, {
             startY: 75,
-            head: [['Descripción', 'Valor']],
+            head: [['Descripción', 'Monto']],
             body: tableData,
             theme: 'grid',
             headStyles: { fillColor: [66, 66, 66] },
         });
 
-        // Pie de página
+        // Detalle de Cobertura (Waterfall)
+        if(paymentResult?.detallesCobertura && paymentResult.detallesCobertura.length > 0) {
+             const coberturaData = paymentResult.detallesCobertura.map(d => [d]);
+             autoTable(doc, {
+                startY: (doc as any).lastAutoTable.finalY + 10,
+                head: [['Desglose de Aplicación']],
+                body: coberturaData,
+                theme: 'striped'
+            });
+        }
+
         const finalY = (doc as any).lastAutoTable.finalY + 20;
         doc.text('Gracias por su pago', 105, finalY, { align: 'center' });
         
@@ -191,7 +200,9 @@ La Espiga
                 {step === 'input' ? (
                     <div className="space-y-6">
                         <div className="p-4 rounded-xl bg-secondary/30 border border-border/50">
-                            <p className="font-semibold text-lg">{account.clienteNombre}</p>
+                            <p className="font-semibold text-lg">
+                                {account.tipoCliente === 'NATURAL' ? account.clienteNombre : account.razonSocial}
+                            </p>
                             <p className="text-sm text-muted-foreground">{account.documento}</p>
                             <p className="text-sm font-mono mt-2">
                                 Deuda Total: <span className="font-bold text-destructive">{formatCurrency(totalPendingDebt)}</span>
@@ -272,7 +283,6 @@ La Espiga
                                     <p className="text-sm text-center text-blue-600 dark:text-blue-400 mb-2">
                                         Pasarela de pagos segura
                                     </p>
-                                    {/* Botón Integrado de Mercado Pago */}
                                     <MercadoPagoButton 
                                         loanId={account.prestamoId}
                                         amount={parsedAmount}
@@ -292,7 +302,7 @@ La Espiga
                             <h3 className="text-2xl font-bold text-green-600">¡Pago Registrado!</h3>
                             <p className="text-muted-foreground">Operación completada</p>
                         </div>
-                        {/* Detalles del pago exitoso ... */}
+                        
                         <div className="grid grid-cols-2 gap-3">
                              <Button onClick={handlePrint} variant="outline" className="w-full">
                                 <Printer className="h-4 w-4 mr-2"/> Imprimir

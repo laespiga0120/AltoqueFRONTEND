@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Filter, Banknote, Smartphone, CreditCard } from 'lucide-react';
+import { Filter, Banknote, Smartphone, CreditCard, Receipt } from 'lucide-react';
 import {
     Table,
     TableBody,
@@ -16,7 +16,7 @@ import {
     DropdownMenuCheckboxItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Transaction, PaymentMethod, TransactionType } from '@/types/operations';
+import { Transaction } from '@/types/operations';
 import { formatCurrency } from '@/lib/operationsData';
 import { cn } from '@/lib/utils';
 
@@ -24,33 +24,34 @@ interface TransactionLogTableProps {
     transactions: Transaction[];
 }
 
-const methodConfig: Record<PaymentMethod, { label: string; icon: typeof Banknote; color: string }> = {
-    cash: { label: 'Efectivo', icon: Banknote, color: 'bg-green-100 text-green-700' },
-    yape: { label: 'Yape', icon: Smartphone, color: 'bg-purple-100 text-purple-700' },
-    plin: { label: 'Plin', icon: Smartphone, color: 'bg-teal-100 text-teal-700' },
-    card: { label: 'Tarjeta', icon: CreditCard, color: 'bg-blue-100 text-blue-700' },
-};
-
-const typeLabels: Record<TransactionType, string> = {
-    payment: 'Pago Cuota',
-    opening: 'Apertura',
-    closing: 'Cierre',
-    adjustment: 'Ajuste',
+// CONFIGURACIÓN ALINEADA CON EL BACKEND (Claves en Mayúsculas)
+const methodConfig: Record<string, { label: string; icon: any; color: string }> = {
+    'EFECTIVO': { label: 'Efectivo', icon: Banknote, color: 'bg-green-100 text-green-700' },
+    'YAPE': { label: 'Yape', icon: Smartphone, color: 'bg-purple-100 text-purple-700' },
+    'PLIN': { label: 'Plin', icon: Smartphone, color: 'bg-teal-100 text-teal-700' },
+    'TARJETA': { label: 'Tarjeta', icon: CreditCard, color: 'bg-blue-100 text-blue-700' },
+    'TRANSFERENCIA': { label: 'Transferencia', icon:  CreditCard, color: 'bg-orange-100 text-orange-700' },
+    // Fallback por defecto
+    'DEFAULT': { label: 'Otro', icon: Receipt, color: 'bg-gray-100 text-gray-700' }
 };
 
 export function TransactionLogTable({ transactions }: TransactionLogTableProps) {
-    const [methodFilter, setMethodFilter] = useState<PaymentMethod[]>([]);
+    const [methodFilter, setMethodFilter] = useState<string[]>([]);
 
     const filteredTransactions = methodFilter.length > 0
         ? transactions.filter(t => methodFilter.includes(t.method))
         : transactions;
 
-    const toggleFilter = (method: PaymentMethod) => {
+    const toggleFilter = (method: string) => {
         setMethodFilter(prev =>
             prev.includes(method)
                 ? prev.filter(m => m !== method)
                 : [...prev, method]
         );
+    };
+
+    const getMethodStyle = (method: string) => {
+        return methodConfig[method] || methodConfig['DEFAULT'];
     };
 
     return (
@@ -71,16 +72,19 @@ export function TransactionLogTable({ transactions }: TransactionLogTableProps) 
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-popover">
-                        {Object.entries(methodConfig).map(([method, config]) => (
-                            <DropdownMenuCheckboxItem
-                                key={method}
-                                checked={methodFilter.includes(method as PaymentMethod)}
-                                onCheckedChange={() => toggleFilter(method as PaymentMethod)}
-                            >
-                                <config.icon className="h-4 w-4 mr-2" />
-                                {config.label}
-                            </DropdownMenuCheckboxItem>
-                        ))}
+                        {Object.entries(methodConfig).map(([key, config]) => {
+                            if (key === 'DEFAULT') return null;
+                            return (
+                                <DropdownMenuCheckboxItem
+                                    key={key}
+                                    checked={methodFilter.includes(key)}
+                                    onCheckedChange={() => toggleFilter(key)}
+                                >
+                                    <config.icon className="h-4 w-4 mr-2" />
+                                    {config.label}
+                                </DropdownMenuCheckboxItem>
+                            );
+                        })}
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
@@ -90,26 +94,25 @@ export function TransactionLogTable({ transactions }: TransactionLogTableProps) 
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-secondary/30 hover:bg-secondary/40">
-                            <TableHead className="font-bold">Hora</TableHead>
+                            <TableHead className="font-bold w-[100px]">Hora</TableHead>
                             <TableHead className="font-bold">Cliente</TableHead>
-                            <TableHead className="font-bold">Tipo Operación</TableHead>
                             <TableHead className="font-bold">Método</TableHead>
-                            <TableHead className="font-bold text-right font-mono">Monto Sistema</TableHead>
-                            <TableHead className="font-bold text-right font-mono">Redondeo</TableHead>
-                            <TableHead className="font-bold text-right font-mono">Monto Real</TableHead>
+                            <TableHead className="font-bold text-right font-mono hidden md:table-cell">Monto Deuda</TableHead>
+                            <TableHead className="font-bold text-right font-mono hidden md:table-cell">Redondeo</TableHead>
+                            <TableHead className="font-bold text-right font-mono text-primary">Ingreso Real</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filteredTransactions.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                    No hay transacciones que mostrar
+                                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                    No hay transacciones registradas en esta sesión.
                                 </TableCell>
                             </TableRow>
                         ) : (
                             filteredTransactions.map((tx) => {
-                                const config = methodConfig[tx.method];
-                                const MethodIcon = config.icon;
+                                const style = getMethodStyle(tx.method);
+                                const MethodIcon = style.icon;
 
                                 return (
                                     <TableRow key={tx.id} className="hover:bg-secondary/10 transition-colors">
@@ -121,30 +124,31 @@ export function TransactionLogTable({ transactions }: TransactionLogTableProps) 
                                         </TableCell>
                                         <TableCell>
                                             <div>
-                                                <p className="font-semibold">{tx.clientName}</p>
-                                                {tx.clientDNI !== 'SYSTEM' && (
+                                                <p className="font-semibold text-sm">{tx.clientName}</p>
+                                                {tx.clientDNI && tx.clientDNI !== '-' && (
                                                     <p className="text-xs text-muted-foreground">{tx.clientDNI}</p>
                                                 )}
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="outline">{typeLabels[tx.type]}</Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge className={cn("gap-1.5", config.color)}>
+                                            <Badge className={cn("gap-1.5 px-2 py-0.5", style.color)} variant="secondary">
                                                 <MethodIcon className="h-3 w-3" />
-                                                {config.label}
+                                                {tx.method}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell className="text-right font-mono">
+                                        
+                                        {/* Monto Sistema (Deuda pagada) */}
+                                        <TableCell className="text-right font-mono text-muted-foreground hidden md:table-cell">
                                             {formatCurrency(tx.systemAmount)}
                                         </TableCell>
-                                        <TableCell className="text-right font-mono">
+                                        
+                                        {/* Ajuste Redondeo */}
+                                        <TableCell className="text-right font-mono hidden md:table-cell">
                                             <span className={cn(
-                                                'font-semibold',
-                                                tx.roundingAdjustment < 0 && 'text-destructive',
+                                                'font-semibold text-xs',
+                                                tx.roundingAdjustment < 0 && 'text-red-500',
                                                 tx.roundingAdjustment > 0 && 'text-green-600',
-                                                tx.roundingAdjustment === 0 && 'text-muted-foreground'
+                                                tx.roundingAdjustment === 0 && 'text-muted-foreground opacity-50'
                                             )}>
                                                 {tx.roundingAdjustment === 0
                                                     ? '—'
@@ -152,7 +156,9 @@ export function TransactionLogTable({ transactions }: TransactionLogTableProps) 
                                                 }
                                             </span>
                                         </TableCell>
-                                        <TableCell className="text-right font-mono font-bold text-primary">
+
+                                        {/* Monto Real (Lo que entró a caja) */}
+                                        <TableCell className="text-right font-mono font-bold text-base text-foreground">
                                             {formatCurrency(tx.realAmount)}
                                         </TableCell>
                                     </TableRow>

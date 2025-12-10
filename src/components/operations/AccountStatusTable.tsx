@@ -22,7 +22,8 @@ interface AccountStatusTableProps {
 }
 
 const getStatusConfig = (status: string) => {
-    const s = status.toLowerCase();
+    // Protección contra status undefined/null
+    const s = (status || '').toLowerCase();
     if (s.includes('pagado')) return { label: 'Pagado', variant: 'success', icon: CheckCircle, className: 'bg-green-600 hover:bg-green-700' };
     if (s.includes('mora')) return { label: status, variant: 'destructive', icon: AlertTriangle, className: '' };
     if (s.includes('adelanto')) return { label: 'Adelanto', variant: 'secondary', icon: CheckCircle, className: 'bg-blue-500/15 text-blue-700' };

@@ -1,7 +1,7 @@
 import { EmailRequest } from "../types/loan";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://al-toque-d0b27cb5aec4.herokuapp.com";
+  import.meta.env.VITE_API_URL || "http://localhost:8080";
 
 export const notificationService = {
   /**
