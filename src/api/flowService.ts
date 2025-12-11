@@ -12,14 +12,35 @@ export interface FlowValidationResponse {
     };
 }
 
+// Helper para obtener el token correcto según tu configuración (authToken)
+const getToken = () => {
+    // 1. Prioridad: 'authToken' (Tu configuración actual)
+    let token = localStorage.getItem('authToken');
+    
+    // 2. Fallback: 'token' (Por si acaso cambia en el futuro)
+    if (!token) token = localStorage.getItem('token');
+
+    // Limpieza: Si el token viene con comillas extra (JSON.stringify), las quitamos
+    if (token && token.startsWith('"') && token.endsWith('"')) {
+        token = token.slice(1, -1);
+    }
+
+    return token;
+};
+
 export const flowService = {
+    /**
+     * Inicia una transacción de pago con Flow.
+     */
     createPayment: async (data: FlowCreatePaymentRequest): Promise<FlowCreatePaymentResponse> => {
-        const token = localStorage.getItem('token');
+        const token = getToken();
         
-        // Validación crítica: Si no hay token, no intentamos la llamada
         if (!token) {
+            console.error("❌ Error: No se encontró 'authToken' en LocalStorage.");
             throw new Error('No se encontró sesión activa. Por favor inicie sesión nuevamente.');
         }
+
+        console.log("✅ Iniciando pago Flow. Token detectado.");
 
         const response = await fetch(`${API_BASE_URL}/api/flow/create`, {
             method: 'POST',
@@ -32,24 +53,24 @@ export const flowService = {
 
         if (!response.ok) {
             const errorData = await response.text();
+            console.error("🔥 Error Respuesta Backend Flow:", response.status, errorData);
             try {
-                // Intentar parsear si es JSON
                 const errorJson = JSON.parse(errorData);
                 throw new Error(errorJson.message || errorJson.error || 'Error al iniciar pago');
             } catch (e) {
-                // Si no es JSON, usar texto plano
-                throw new Error(errorData || 'Error al iniciar pago con Flow');
+                // Si el error es HTML (común en errores de servidor/proxy), mostramos mensaje genérico
+                throw new Error(`Error del servidor (${response.status}). Revise consola.`);
             }
         }
 
         return await response.json();
     },
 
+    /**
+     * Valida el token de pago retornado por Flow.
+     */
     validatePayment: async (token: string): Promise<FlowValidationResponse> => {
-        const authToken = localStorage.getItem('token');
-        // Para validación pública (retorno de Flow), a veces no hay sesión si el usuario cerró el navegador.
-        // Pero tu backend /status requiere autenticación. 
-        // Si el usuario perdió la sesión, el frontend debería manejarlo (redirigir al login).
+        const authToken = getToken();
         
         const headers: HeadersInit = {
             'Content-Type': 'application/json'
