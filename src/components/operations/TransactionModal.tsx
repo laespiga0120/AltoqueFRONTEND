@@ -62,8 +62,6 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
     const docType = account?.tipoCliente === 'JURIDICA' ? 'FACTURA' : 'BOLETA';
 
     // CONSTANTE DE NEGOCIO FLOW (SOLES)
-    // Flow Perú establece un mínimo operativo de S/ 2.00
-    // Equivalente aprox a > 500 CLP, cubriendo el error de 350 CLP
     const MIN_FLOW_AMOUNT = 2.00;
 
     const suggestedAmounts = [
@@ -267,13 +265,13 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                                         Pasarela de pagos segura
                                     </p>
                                     
+                                    {/* CAMBIO: Usamos targetEmail que es editable, o un fallback seguro */}
                                     <FlowButton 
                                         loanId={account.prestamoId}
                                         amount={parsedAmount}
                                         clientName={account.clienteNombre}
-                                        clientEmail={account.correo}
+                                        clientEmail={targetEmail && targetEmail.includes('@') ? targetEmail : 'pagos@altoque.pe'} 
                                         description={`Pago Cuota - ${account.clienteNombre}`}
-                                        // Validación: Deshabilitar si es menor al mínimo o mayor a la deuda
                                         disabled={parsedAmount < MIN_FLOW_AMOUNT || parsedAmount > totalPendingDebt}
                                     />
                                     
@@ -282,6 +280,19 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                                         <div className="flex items-center justify-center gap-2 text-xs text-amber-600 mt-2 font-medium">
                                             <AlertCircle className="h-4 w-4" />
                                             <span>Monto mínimo para Flow: {formatCurrency(MIN_FLOW_AMOUNT)}</span>
+                                        </div>
+                                    )}
+
+                                    {/* Input de correo opcional para Flow si no tiene */}
+                                    {(!account.correo || account.correo.trim() === '') && (
+                                        <div className="mt-2">
+                                            <Label className="text-xs">Correo para comprobante (Flow)</Label>
+                                            <Input 
+                                                value={targetEmail}
+                                                onChange={(e) => setTargetEmail(e.target.value)}
+                                                placeholder="cliente@email.com"
+                                                className="h-8 text-sm mt-1"
+                                            />
                                         </div>
                                     )}
                                     
