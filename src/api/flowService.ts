@@ -4,7 +4,7 @@ import { FlowCreatePaymentRequest, FlowCreatePaymentResponse } from '../types/fl
 export interface FlowValidationResponse {
     status: 'SUCCESS' | 'FAILURE' | 'PENDING' | 'UNKNOWN';
     flowOrder: string;
-    paymentId?: number; // ID de base de datos para generar PDF
+    paymentId?: number;
     amount?: number;
     error?: {
         code: string;
@@ -15,9 +15,10 @@ export interface FlowValidationResponse {
 export const flowService = {
     /**
      * Inicia una transacción de pago con Flow.
+     * CORRECCIÓN: Se agrega '/api' al path para coincidir con el Controller Backend.
      */
     createPayment: async (data: FlowCreatePaymentRequest): Promise<FlowCreatePaymentResponse> => {
-        const response = await fetch(`${API_BASE_URL}/flow/create`, {
+        const response = await fetch(`${API_BASE_URL}/api/flow/create`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -36,9 +37,10 @@ export const flowService = {
 
     /**
      * Valida el token de pago retornado por Flow.
+     * CORRECCIÓN: Se agrega '/api' al path.
      */
     validatePayment: async (token: string): Promise<FlowValidationResponse> => {
-        const response = await fetch(`${API_BASE_URL}/flow/status?token=${token}`, {
+        const response = await fetch(`${API_BASE_URL}/api/flow/status?token=${token}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
