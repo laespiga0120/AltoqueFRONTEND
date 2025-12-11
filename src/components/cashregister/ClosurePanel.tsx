@@ -134,7 +134,7 @@ export function ClosurePanel({ theoreticalTotal, onCloseRegister }: ClosurePanel
                     className="w-full h-14 text-lg font-bold gap-3 bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-all"
                 >
                     <FileText className="h-5 w-5" />
-                    {processing ? 'Procesando...' : 'Cerrar Caja y Generar Reporte'}
+                    {processing ? 'Procesando...' : 'Cerrar Caja'}
                 </Button>
             </CardContent>
         </Card>
