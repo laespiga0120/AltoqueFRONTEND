@@ -1,6 +1,6 @@
 import { ClientSummary, ClientDetail } from "../types/client";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://al-toque-d0b27cb5aec4.herokuapp.com";
 
 // Extendemos ClientSummary para asegurar que tenga ID, necesario para buscar el estado de cuenta
 export interface ClientSearchResult extends ClientSummary {

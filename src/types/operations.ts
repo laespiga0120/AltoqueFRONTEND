@@ -19,6 +19,7 @@ export interface ClientAccount {
   clienteNombre: string;
   razonSocial: string;
   documento: string; // DNI o RUC
+  correo?: string; // Nuevo campo para envío de comprobantes
   deudaOriginalTotal: number;
   deudaPendienteTotal: number;
   cuotas: AccountInstallment[];
@@ -32,7 +33,7 @@ export interface PagoRequest {
 }
 
 export interface PagoResponse {
-  id: number;
+  idPago: number;
   status: string;
   statusDetail: string;
   mensaje: string;
@@ -97,4 +98,3 @@ export interface Transaction {
   roundingAdjustment: number; // ajusteRedondeo
   realAmount: number; // Lo que entra a caja (montoTotal + ajuste)
 }
-

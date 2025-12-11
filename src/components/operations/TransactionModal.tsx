@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Banknote,
-    Printer,
     Mail,
     CheckCircle2,
     RotateCcw,
     Receipt,
     Globe,
-    Download
+    Download,
+    Loader2,
+    AlertCircle
 } from 'lucide-react';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -22,8 +23,7 @@ import { ClientAccount, PagoResponse, PagoRequest } from '@/types/operations';
 import { formatCurrency, calculateRounding} from '@/lib/operationsData';
 import { operationsService } from '@/api/operationsService';
 import { MercadoPagoButton } from '@/components/MercadoPagoButton';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { comprobanteService } from '@/api/comprobantesService';
 
 interface TransactionModalProps {
     open: boolean;
@@ -39,18 +39,32 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
     const [amount, setAmount] = useState('');
     const [tab, setTab] = useState<string>('EFECTIVO');
     
+    // Estados de éxito
     const [processing, setProcessing] = useState(false);
     const [paymentResult, setPaymentResult] = useState<PagoResponse | null>(null);
+    const [sendingEmail, setSendingEmail] = useState(false);
+    
+    // Inicialización del correo
+    const [targetEmail, setTargetEmail] = useState(account?.correo || '');
+
+    useEffect(() => {
+        if (account?.correo) {
+            setTargetEmail(account.correo);
+        } else {
+            setTargetEmail('');
+        }
+    }, [account]);
 
     const totalPendingDebt = account?.deudaPendienteTotal || 0;
     const parsedAmount = parseFloat(amount) || 0;
     const { adjustment, rounded } = calculateRounding(parsedAmount);
 
+    const docType = account?.tipoCliente === 'JURIDICA' ? 'FACTURA' : 'BOLETA';
+
     const suggestedAmounts = [
         { label: 'Deuda Total', value: totalPendingDebt },
     ].filter(s => s.value > 0);
     
-    // Buscar cuota pendiente más antigua
     const currentInstallment = account?.cuotas?.find(c => c.totalAPagar > 0);
     if (currentInstallment) {
         suggestedAmounts.unshift({ label: `Cuota ${currentInstallment.numeroCuota}`, value: currentInstallment.totalAPagar });
@@ -64,7 +78,6 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
 
         setProcessing(true);
         try {
-            // Construimos el DTO exacto que Java espera
             const requestPayload: PagoRequest = {
                 prestamoId: account.prestamoId,
                 monto: parsedAmount,
@@ -78,8 +91,6 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
             setStep('success');
             toast.success('Pago registrado correctamente');
             
-            // Notificamos al padre pero NO cerramos el modal aun para que vea el voucher
-            // El cierre real se hace al dar click en "Nueva Operación" o cerrar el dialogo
         } catch (error) {
             console.error(error);
             toast.error('Error procesando el pago. Intente nuevamente.');
@@ -88,25 +99,49 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
         }
     };
 
-    const handleSendEmail = () => {
-        const subject = encodeURIComponent(`Comprobante de Pago - ${account.clienteNombre}`);
-        const body = encodeURIComponent(`
-Estimado(a) ${account.clienteNombre},
+    const handleSendEmail = async () => {
+        if (!paymentResult?.idPago) return;
+        
+        if (!targetEmail || !targetEmail.includes('@')) {
+            toast.error('Por favor ingrese un correo válido.');
+            return;
+        }
+        
+        setSendingEmail(true);
+        try {
+            await comprobanteService.enviarComprobante(paymentResult.idPago, docType, targetEmail);
+            toast.success(`Comprobante enviado a ${targetEmail}`);
+        } catch (error) {
+            console.error("Error envío correo:", error);
+            toast.error('Error al enviar correo. Verifique la conexión.');
+        } finally {
+            setSendingEmail(false);
+        }
+    };
 
-Se ha registrado su pago correctamente.
-
-Detalles de la Operación:
--------------------------
-Monto Pagado: ${formatCurrency(parsedAmount)}
-Fecha: ${new Date().toLocaleString()}
-Documento: ${account.documento}
-
-Deuda Restante: ${paymentResult?.deudaRestante ? formatCurrency(paymentResult.deudaRestante) : 'N/A'}
-
-Gracias por su preferencia.
-La Espiga
-        `);
-        window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+    const handleDownload = async () => {
+        if (!paymentResult?.idPago) return;
+        const toastId = toast.loading('Generando documento...');
+        
+        try {
+            const blob = await comprobanteService.downloadComprobante(paymentResult.idPago, docType);
+            
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${docType}_${paymentResult.idPago}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            toast.dismiss(toastId);
+            toast.success('Descarga completada');
+        } catch (error: any) {
+            console.error("Error descarga PDF:", error);
+            toast.dismiss(toastId);
+            toast.error(error.message || 'Error al descargar el archivo');
+        }
     };
 
     const handleNewOperation = () => {
@@ -114,71 +149,9 @@ La Espiga
         setAmount('');
         setTab('EFECTIVO');
         setPaymentResult(null);
-        onSuccess(); // Aquí notificamos al padre para que refresque datos
-    };
-
-    const generatePDF = () => {
-        const doc = new jsPDF();
-        
-        doc.setFontSize(16);
-        doc.text('COMPROBANTE DE PAGO', 105, 20, { align: 'center' });
-        
-        doc.setFontSize(10);
-        doc.text(`Fecha: ${new Date().toLocaleString()}`, 105, 30, { align: 'center' });
-        doc.text('La Espiga - Préstamos', 105, 36, { align: 'center' });
-
-        doc.setFontSize(11);
-        doc.text('Detalles del Cliente:', 14, 50);
-        
-        doc.setFontSize(10);
-        doc.text(`Cliente: ${account.clienteNombre}`, 14, 58);
-        doc.text(`Documento: ${account.documento}`, 14, 64);
-        
-        const tableData = [
-            ['Concepto', 'Valor'],
-            ['Monto Recibido', formatCurrency(parsedAmount)],
-            ['Ajuste Redondeo', formatCurrency(adjustment)],
-            ['Total Cobrado', formatCurrency(rounded)],
-        ];
-        
-        if (paymentResult?.deudaRestante !== undefined) {
-             tableData.push(['Deuda Restante', formatCurrency(paymentResult.deudaRestante)]);
-        }
-
-        autoTable(doc, {
-            startY: 75,
-            head: [['Descripción', 'Monto']],
-            body: tableData,
-            theme: 'grid',
-            headStyles: { fillColor: [66, 66, 66] },
-        });
-
-        // Detalle de Cobertura (Waterfall)
-        if(paymentResult?.detallesCobertura && paymentResult.detallesCobertura.length > 0) {
-             const coberturaData = paymentResult.detallesCobertura.map(d => [d]);
-             autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Desglose de Aplicación']],
-                body: coberturaData,
-                theme: 'striped'
-            });
-        }
-
-        const finalY = (doc as any).lastAutoTable.finalY + 20;
-        doc.text('Gracias por su pago', 105, finalY, { align: 'center' });
-        
-        return doc;
-    };
-
-    const handlePrint = () => {
-        const doc = generatePDF();
-        doc.autoPrint();
-        window.open(doc.output('bloburl'), '_blank');
-    };
-
-    const handleDownload = () => {
-        const doc = generatePDF();
-        doc.save(`voucher_${account.documento}_${Date.now()}.pdf`);
+        setSendingEmail(false);
+        setTargetEmail(account.correo || ''); 
+        onSuccess(); 
     };
 
     const handleClose = () => {
@@ -294,33 +267,59 @@ La Espiga
                         </Tabs>
                     </div>
                 ) : (
-                    <div className="space-y-6 py-4">
+                    // --- VISTA DE ÉXITO ---
+                    <div className="space-y-6 py-4 animate-in fade-in zoom-in-95 duration-300">
                         <div className="flex flex-col items-center text-center">
                             <div className="p-4 rounded-full bg-green-100 mb-4">
                                 <CheckCircle2 className="h-16 w-16 text-green-600" />
                             </div>
                             <h3 className="text-2xl font-bold text-green-600">¡Pago Registrado!</h3>
-                            <p className="text-muted-foreground">Operación completada</p>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-3">
-                             <Button onClick={handlePrint} variant="outline" className="w-full">
-                                <Printer className="h-4 w-4 mr-2"/> Imprimir
-                            </Button>
-                            <Button onClick={handleDownload} variant="outline" className="w-full">
-                                <Download className="h-4 w-4 mr-2"/> Descargar
-                            </Button>
+                            <p className="text-muted-foreground">
+                                Se ha generado {docType === 'FACTURA' ? 'la Factura' : 'la Boleta'} electrónica.
+                            </p>
                         </div>
                         
                         <div className="grid grid-cols-1 gap-3">
-                            <Button onClick={handleSendEmail} variant="outline" className="w-full">
-                                <Mail className="h-4 w-4 mr-2"/> Enviar por Correo
+                            <Button onClick={handleDownload} variant="outline" className="w-full h-12 border-primary/20 hover:bg-primary/5">
+                                <Download className="h-5 w-5 mr-2 text-primary"/> Descargar Comprobante
                             </Button>
+                        </div>
+                        
+                        <div className="bg-secondary/20 p-4 rounded-lg space-y-3">
+                            <div className="space-y-2">
+                                <Label className="text-xs font-semibold uppercase text-muted-foreground">Enviar copia por correo</Label>
+                                <div className="flex gap-2">
+                                    <Input 
+                                        placeholder="correo@ejemplo.com" 
+                                        value={targetEmail}
+                                        onChange={(e) => setTargetEmail(e.target.value)}
+                                        className="bg-background"
+                                    />
+                                    <Button 
+                                        onClick={handleSendEmail} 
+                                        variant="default"
+                                        disabled={sendingEmail || !targetEmail}
+                                        className="shrink-0"
+                                    >
+                                        {sendingEmail ? (
+                                            <Loader2 className="h-4 w-4 animate-spin"/>
+                                        ) : (
+                                            <Mail className="h-4 w-4"/> 
+                                        )}
+                                    </Button>
+                                </div>
+                                {!account.correo && !targetEmail && (
+                                    <div className="flex items-center gap-1 text-xs text-amber-600">
+                                        <AlertCircle className="h-3 w-3" />
+                                        <span>Cliente sin correo registrado.</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-3">
-                            <Button onClick={handleNewOperation} size="lg" className="w-full">
-                                <RotateCcw className="h-5 w-5 mr-2"/> Nueva Operación
+                        <div className="grid grid-cols-1 gap-3 pt-2">
+                            <Button onClick={handleNewOperation} size="lg" className="w-full bg-gradient-to-r from-primary to-accent text-white shadow-md">
+                                <RotateCcw className="h-5 w-5 mr-2"/> Finalizar / Nueva Operación
                             </Button>
                         </div>
                     </div>
