@@ -1,7 +1,7 @@
 import { Wallet, ArrowDownCircle, Coins, Smartphone, Calculator } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Caja } from '@/types/operations'; // Usamos el tipo correcto
-import { formatCurrency } from '@/lib/operationsData'; // Asumiendo que tienes esta utilidad
+import { formatCurrency } from '@/lib/operationsData';
 import { cn } from '@/lib/utils';
 
 interface SummaryCardsProps {
@@ -30,8 +30,9 @@ export function SummaryCards({ caja }: SummaryCardsProps) {
             showSign: true,
         },
         {
+            // NUEVA CARD: Entradas Digitales (Flow)
             label: 'Entradas Digitales',
-            value: caja.totalDigitalSistema,
+            value: caja.totalDigitalSistema || 0, // Aseguramos valor por defecto si es null
             icon: Smartphone,
             iconBg: 'bg-purple-100 text-purple-600',
         },

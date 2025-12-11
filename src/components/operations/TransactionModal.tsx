@@ -22,7 +22,8 @@ import { toast } from 'sonner';
 import { ClientAccount, PagoResponse, PagoRequest } from '@/types/operations';
 import { formatCurrency, calculateRounding} from '@/lib/operationsData';
 import { operationsService } from '@/api/operationsService';
-import { MercadoPagoButton } from '@/components/MercadoPagoButton';
+// CAMBIO: Importamos FlowButton en lugar de MercadoPagoButton
+import { FlowButton } from '@/components/FlowButton';
 import { comprobanteService } from '@/api/comprobantesService';
 
 interface TransactionModalProps {
@@ -195,7 +196,7 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                                 </TabsTrigger>
                                 <TabsTrigger value="ONLINE">
                                     <Globe className="h-4 w-4 mr-2"/>
-                                    Online
+                                    Online (Flow)
                                 </TabsTrigger>
                             </TabsList>
 
@@ -261,18 +262,23 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                                     <p className="text-sm text-center text-blue-600 dark:text-blue-400 mb-2">
                                         Pasarela de pagos segura
                                     </p>
-                                    <MercadoPagoButton 
+                                    
+                                    {/* CAMBIO: Implementación del Botón Flow */}
+                                    <FlowButton 
                                         loanId={account.prestamoId}
                                         amount={parsedAmount}
                                         clientName={account.clienteNombre}
-                                        disabled={parsedAmount <= 0 || parsedAmount > totalPendingDebt} // Deshabilitar si es <= 0 o mayor a la deuda
+                                        clientEmail={account.correo}
+                                        description={`Pago Cuota - ${account.clienteNombre}`}
+                                        disabled={parsedAmount <= 0 || parsedAmount > totalPendingDebt}
                                     />
+                                    
                                 </div>
                             </TabsContent>
                         </Tabs>
                     </div>
                 ) : (
-                    // --- VISTA DE ÉXITO ---
+                    // --- VISTA DE ÉXITO (Solo para Efectivo) ---
                     <div className="space-y-6 py-4 animate-in fade-in zoom-in-95 duration-300">
                         <div className="flex flex-col items-center text-center">
                             <div className="p-4 rounded-full bg-green-100 mb-4">

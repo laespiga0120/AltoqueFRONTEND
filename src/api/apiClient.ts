@@ -1,6 +1,6 @@
 // Definimos la URL base de tu API.
 // Es una buena práctica usar variables de entorno para esto.
-const API_BASE_URL =
+export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   (import.meta.env.MODE === "development" ? "" : "https://al-toque-d0b27cb5aec4.herokuapp.com");
 
