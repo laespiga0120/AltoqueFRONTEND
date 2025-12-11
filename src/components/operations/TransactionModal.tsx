@@ -76,6 +76,11 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
             return;
         }
 
+        if (parsedAmount > totalPendingDebt) {
+            toast.error('El monto a pagar no puede ser mayor a la deuda total');
+            return;
+        }
+
         setProcessing(true);
         try {
             const requestPayload: PagoRequest = {
@@ -260,7 +265,7 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                                         loanId={account.prestamoId}
                                         amount={parsedAmount}
                                         clientName={account.clienteNombre}
-                                        disabled={parsedAmount <= 0}
+                                        disabled={parsedAmount <= 0 || parsedAmount > totalPendingDebt} // Deshabilitar si es <= 0 o mayor a la deuda
                                     />
                                 </div>
                             </TabsContent>
