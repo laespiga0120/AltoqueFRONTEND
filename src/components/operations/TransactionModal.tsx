@@ -22,7 +22,6 @@ import { toast } from 'sonner';
 import { ClientAccount, PagoResponse, PagoRequest } from '@/types/operations';
 import { formatCurrency, calculateRounding} from '@/lib/operationsData';
 import { operationsService } from '@/api/operationsService';
-// CAMBIO: Importamos FlowButton en lugar de MercadoPagoButton
 import { FlowButton } from '@/components/FlowButton';
 import { comprobanteService } from '@/api/comprobantesService';
 
@@ -61,6 +60,11 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
     const { adjustment, rounded } = calculateRounding(parsedAmount);
 
     const docType = account?.tipoCliente === 'JURIDICA' ? 'FACTURA' : 'BOLETA';
+
+    // CONSTANTE DE NEGOCIO FLOW (SOLES)
+    // Flow Perú establece un mínimo operativo de S/ 2.00
+    // Equivalente aprox a > 500 CLP, cubriendo el error de 350 CLP
+    const MIN_FLOW_AMOUNT = 2.00;
 
     const suggestedAmounts = [
         { label: 'Deuda Total', value: totalPendingDebt },
@@ -263,15 +267,23 @@ export function TransactionModal({ open, onClose, account, onSuccess }: Transact
                                         Pasarela de pagos segura
                                     </p>
                                     
-                                    {/* CAMBIO: Implementación del Botón Flow */}
                                     <FlowButton 
                                         loanId={account.prestamoId}
                                         amount={parsedAmount}
                                         clientName={account.clienteNombre}
                                         clientEmail={account.correo}
                                         description={`Pago Cuota - ${account.clienteNombre}`}
-                                        disabled={parsedAmount <= 0 || parsedAmount > totalPendingDebt}
+                                        // Validación: Deshabilitar si es menor al mínimo o mayor a la deuda
+                                        disabled={parsedAmount < MIN_FLOW_AMOUNT || parsedAmount > totalPendingDebt}
                                     />
+                                    
+                                    {/* Mensaje de alerta visual si el monto es insuficiente */}
+                                    {parsedAmount > 0 && parsedAmount < MIN_FLOW_AMOUNT && (
+                                        <div className="flex items-center justify-center gap-2 text-xs text-amber-600 mt-2 font-medium">
+                                            <AlertCircle className="h-4 w-4" />
+                                            <span>Monto mínimo para Flow: {formatCurrency(MIN_FLOW_AMOUNT)}</span>
+                                        </div>
+                                    )}
                                     
                                 </div>
                             </TabsContent>
