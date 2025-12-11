@@ -129,7 +129,7 @@ export function ClosurePanel({ theoreticalTotal, onCloseRegister }: ClosurePanel
                 {/* Close Button */}
                 <Button
                     onClick={handleClose}
-                    disabled={processing || !showResult}
+                    disabled={processing || !showResult || !isBalanced}
                     size="lg"
                     className="w-full h-14 text-lg font-bold gap-3 bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-all"
                 >
@@ -139,4 +139,5 @@ export function ClosurePanel({ theoreticalTotal, onCloseRegister }: ClosurePanel
             </CardContent>
         </Card>
     );
+
 }
